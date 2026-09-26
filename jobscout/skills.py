@@ -77,7 +77,9 @@ SKILLS: dict[str, list[str]] = {
     "Einkauf / Procurement": ["einkauf", "procurement", "beschaffung"], "Supply Chain": ["supply chain", "logistik", "logistics"],
     # Technik / Ingenieurwesen / Gesundheit
     "CAD": ["cad", "autocad", "solidworks", "catia", "inventor"], "Elektrotechnik": ["elektrotechnik", "electrical engineering"],
-    "Maschinenbau": ["maschinenbau", "mechanical engineering"], "Automation / SPS": ["sps", "plc", "automation", "automatisierung", "siemens tia"],
+    "Maschinenbau": ["maschinenbau", "mechanical engineering"], "Automation / SPS": ["sps", "plc", "industrial automation", "industrieautomation", "automatisierungstechnik", "siemens tia"],
+    "Laborautomation": ["laboratory automation", "lab automation", "laborautomation", "laborautomatisierung", "liquid handling"],
+    "Prozessautomation / RPA": ["rpa", "robotic process automation", "process automation", "prozessautomation", "prozessautomatisierung"],
     "GMP": ["gmp", "good manufacturing practice"], "Qualitätsmanagement": ["qualitätsmanagement", "quality management", "iso 9001", "qms"],
     "Regulatory Affairs": ["regulatory affairs", "mdr", "fda"], "Pflege": ["pflegefachfrau", "pflegefachmann", "pflege hf", "pflege fh"],
     "BIM": ["bim", "revit"],
@@ -127,6 +129,19 @@ DEGREE_WORDS = re.compile(
     r"anwaltspatent)(?!\w)",
     re.IGNORECASE,
 )
+# Verwandte Studienrichtungen: zählen nur, wenn das Inserat "or related field" / "oder vergleichbar" erlaubt.
+RELATED_FIELDS: list[set[str]] = [
+    {"Studium Informatik", "Studium Wirtschaftsinformatik", "Studium Mathematik / Statistik", "Studium Physik",
+     "Studium Ingenieurwesen"},
+    {"Studium BWL / Business", "Studium VWL / Economics", "Studium Finance", "Studium Wirtschaftsinformatik"},
+    {"Studium Chemie", "Studium Biologie / Life Sciences", "Studium Pharmazie", "Studium Medizin",
+     "Studium Naturwissenschaften"},
+]
+RELATED_WORDS = re.compile(
+    r"(?<!\w)(related|comparable|similar|equivalent|relevant field|vergleichbar\w*|verwandt\w*|ähnlich\w*|"
+    r"gleichwertig\w*|äquivalent\w*|entsprechend\w*)(?!\w)",
+    re.IGNORECASE,
+)
 DEGREE_LEVEL_SKILLS = {"Hochschulabschluss", "Doktorat / PhD", "Eidg. Fachausweis", "Lehre / EFZ"}
 OR_WORDS = re.compile(r"(?<!\w)(or|oder|ou|o|bzw\.?|resp\.?)(?!\w)|/", re.IGNORECASE)
 
@@ -164,12 +179,16 @@ def _load_extra() -> dict[str, list[str]]:
     return extra
 
 
+# Mehrzahl und deutsche Zusammensetzungen: "stakeholders", "Englischkenntnisse", "Verkaufserfahrung", "SAP-Kenntnisse"
+COMPOUND = r"(?:s|es)?(?:-?(?:kenntniss\w*|kenntnis|erfahrung\w*|flair|wissen|know-how|skills?))?"
+
+
 def _compile(table: dict[str, list[str]]) -> list[tuple[str, re.Pattern]]:
     compiled = []
     for name, aliases in table.items():
         alt = "|".join(re.escape(a) for a in sorted(aliases, key=len, reverse=True))
         # Wortgrenzen, die auch Sonderzeichen wie C#, C++, .NET erlauben; optionales Mehrzahl-s
-        compiled.append((name, re.compile(rf"(?<![\w]){'(?:' + alt + ')'}s?(?![\w+#])", re.IGNORECASE)))
+        compiled.append((name, re.compile(rf"(?<![\w]){'(?:' + alt + ')'}{COMPOUND}(?![\w+#])", re.IGNORECASE)))
     return compiled
 
 
@@ -242,29 +261,61 @@ def _is_nice(line: str) -> bool:
     return any(re.search(rf"(?<!\w){re.escape(m)}(?!\w)", low) for m in NICE_MARKERS)
 
 
+CLAUSE_SPLIT = re.compile(r"[,;()]|(?<!\w)(?:idealerweise|ideally|preferably|vorzugsweise)(?!\w)", re.IGNORECASE)
+
+
+def _clauses(line: str) -> list[tuple[str, bool]]:
+    """Teilt eine Zeile in Satzteile und markiert, welche "von Vorteil" sind.
+    "Erfahrung im Verkauf, idealerweise in der Telekommunikation" -> Verkauf = Pflicht, Telekom = Plus.
+    "Fluent in English, German is a plus" -> Englisch = Pflicht, Deutsch = Plus."""
+    parts, last = [], 0
+    for m in CLAUSE_SPLIT.finditer(line):
+        parts.append(line[last : m.start()])
+        last = m.start() if m.group(0)[0].isalpha() else m.end()  # Marker-Wort bleibt im nächsten Teil
+    parts.append(line[last:])
+    return [(p, _is_nice(p)) for p in parts if p.strip()]
+
+
+def _option_is_nice(option: str, line: str) -> bool | None:
+    """True/False, wenn die Option in einem Plus-/Pflicht-Satzteil steht; None, wenn nicht zuordenbar."""
+    pattern = dict(_patterns()).get(option) or dict(_degree_patterns()).get(option)
+    if pattern is None:
+        return None
+    flags = [nice for clause, nice in _clauses(line) if pattern.search(clause)]
+    return all(flags) if flags else None
+
+
 def _line_requirements(line: str) -> list[Requirement]:
     """Zerlegt eine Anforderungszeile in Requirements.
     - Ausbildungszeile mit Studienrichtungen -> EINE Anforderung, jede genannte Richtung genügt
       ("University degree in Law, Business Administration, or a related discipline").
     - Zeile mit "oder" / "or" / "/" -> die Skills der Zeile sind Alternativen.
     - sonst -> jeder Skill ist eine eigene Pflicht ("Deutsch und Englisch")."""
-    nice = _is_nice(line)
+    line_nice = _is_nice(line)
     skills = find_skills(line)
     fields = find_degree_fields(line)
     reqs: list[Requirement] = []
+
+    def nice_for(options: list[str]) -> bool:
+        if not line_nice:
+            return False
+        flags = [f for f in (_option_is_nice(o, line) for o in options) if f is not None]
+        return all(flags) if flags else True
+
     if fields:
         # In einer Ausbildungszeile gelten auch genannte Fachgebiete (z.B. "Corporate Governance") als Alternative
         options = fields + [s for s in skills if s not in DEGREE_LEVEL_SKILLS]
-        reqs.append(Requirement(options=options, text=line, nice=nice, kind="degree"))
+        reqs.append(Requirement(options=options, text=line, nice=nice_for(fields), kind="degree",
+                                related_ok=bool(RELATED_WORDS.search(line))))
         return reqs
     levels = [s for s in skills if s in DEGREE_LEVEL_SKILLS]
     others = [s for s in skills if s not in DEGREE_LEVEL_SKILLS]
     if levels:  # "Abgeschlossene Lehre oder Studium" -> eine Anforderung
-        reqs.append(Requirement(options=levels, text=line, nice=nice, kind="degree"))
+        reqs.append(Requirement(options=levels, text=line, nice=nice_for(levels), kind="degree"))
     if len(others) > 1 and OR_WORDS.search(line):
-        reqs.append(Requirement(options=others, text=line, nice=nice))
+        reqs.append(Requirement(options=others, text=line, nice=nice_for(others)))
     else:
-        reqs.extend(Requirement(options=[s], text=line, nice=nice) for s in others)
+        reqs.extend(Requirement(options=[s], text=line, nice=nice_for([s])) for s in others)
     return reqs
 
 

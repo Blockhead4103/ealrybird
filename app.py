@@ -49,10 +49,14 @@ with tab_search:
                                         help="Firmen ohne Angabe in companies.yaml werden immer durchsucht.")
         swiss_only = st.checkbox("Nur Stellen in der Schweiz", value=True,
                                  help="Wichtig bei globalen Firmen (z.B. Novartis, Roche). Stellen ohne Ortsangabe bleiben drin.")
+        include_student = st.checkbox("Auch Stellen für Studierende, Praktika, Lehrstellen, Doktorat", value=False)
     with col2:
         cv_file = st.file_uploader("Dein CV (PDF)", type=["pdf"])
         email_to = st.text_input("E-Mail für die Resultate", placeholder="du@example.ch")
         top_n = st.slider("Wie viele Top-Treffer mailen?", 5, 50, 15)
+        min_score = st.slider("Mindest-Match (%)", 0, 100, 50,
+                              help="Stellen darunter werden ausgeblendet und nicht gemailt. "
+                                   "Stellen ohne erfüllte Fach-Anforderung liegen bei höchstens 30 %.")
     llm_ready = bool(env("LLM_BASE_URL") and env("LLM_MODEL"))
     use_llm = st.checkbox("KI für Skill-Erkennung nutzen", value=False, disabled=not llm_ready,
                           help="Nur aktiv, wenn LLM_BASE_URL und LLM_MODEL in .env gesetzt sind. Ohne KI: gratis Regel-Erkennung.")
@@ -64,7 +68,7 @@ with tab_search:
             st.stop()
         with st.status("Durchsuche Karriereseiten …", expanded=True) as status:
             jobs, errors = find_jobs(titles, int(max_age), use_llm=use_llm, min_employees=int(min_employees),
-                                     progress=st.write, swiss_only=swiss_only)
+                                     progress=st.write, swiss_only=swiss_only, include_student_jobs=include_student)
             status.update(label=f"{len(jobs)} Stellen gefunden", state="complete", expanded=bool(errors))
         st.session_state["jobs"] = jobs
         st.session_state["search"] = (titles, int(max_age))
@@ -80,14 +84,18 @@ with tab_search:
             st.warning("Aus dem PDF liess sich kein Text lesen (gescanntes Bild?). Bitte CV als Text-PDF exportieren.")
 
         if cv_text:
-            matches = match_cv(jobs, cv_text, top=len(jobs))
+            all_matches = match_cv(jobs, cv_text, top=len(jobs))
+            matches = [m for m in all_matches if m.score >= min_score]
             st.subheader(f"Rangliste nach Übereinstimmung mit deinem CV ({len(matches)})")
+            if len(all_matches) > len(matches):
+                st.caption(f"{len(all_matches) - len(matches)} weitere Stellen unter {min_score} % Match ausgeblendet "
+                           "(Regler 'Mindest-Match' anpassen, um sie zu sehen).")
             for m in matches:
                 j = m.job
                 flag = "⚠️ " if m.knockout else ""
                 with st.expander(f"{flag}{m.score:.0f}% · {j.title} – {j.company}{where(j)}"):
                     for ko in m.knockout:
-                        st.error(f"Ausschlusskriterium – {ko}. Diese Studienrichtung wurde in deinem CV nicht gefunden.")
+                        st.error(f"Ausschlusskriterium – {ko}. Dieser Abschluss wurde in deinem CV nicht gefunden.")
                     st.markdown(f"[Zum Inserat]({j.url}) · Datum: {j.effective_date or 'unbekannt'}"
                                 + ("" if j.posted else " *(erstes Auftauchen, kein Datum im Inserat)*"))
                     st.markdown(f"**Must-Have:** {', '.join(j.must_have) or '– (keine erkannt)'}")

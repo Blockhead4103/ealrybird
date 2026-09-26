@@ -22,6 +22,7 @@ class Requirement:
     text: str = ""  # Originalzeile aus dem Inserat
     nice: bool = False
     kind: str = "skill"  # "skill" | "degree"
+    related_ok: bool = False  # Inserat erlaubt "verwandte/vergleichbare" Studienrichtungen
 
     @property
     def label(self) -> str:
@@ -42,6 +43,7 @@ class Job:
     requirements: list[Requirement] = field(default_factory=list)
     unchecked: list[str] = field(default_factory=list)  # Anforderungszeilen ohne erkannten Skill
     section_found: bool = True  # False = kein Anforderungs-Abschnitt gefunden, ganzer Text durchsucht
+    level: str | None = None  # z.B. "Studierende / Praktikum", "Lehrstelle", "Doktorat" (siehe levels.py)
 
     @property
     def effective_date(self) -> date | None:

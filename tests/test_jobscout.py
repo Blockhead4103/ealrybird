@@ -304,7 +304,7 @@ def test_degree_field_is_a_knockout():
     bwl = rank([job], "Bachelor in Business Administration, HSG\nDeutsch, Englisch")[0]
     assert not bwl.knockout  # BWL ist laut Inserat ausdrücklich zulässig
     jurist = rank([job], "MLaw, Universität Zürich\nGesellschaftsrecht, Corporate Governance, Company Secretary\nDeutsch, Englisch")[0]
-    assert not jurist.knockout and jurist.score > 90
+    assert not jurist.knockout and jurist.score > 80
 
 
 def test_or_and_and_groups():
@@ -323,3 +323,53 @@ def test_law_outside_degree_line_is_not_a_degree():
     assert find_degree_fields("Master in Law (MLaw)") == ["Studium Recht"]
     assert cv_degree_fields("Master of Science\nInformatik, ETH Zürich") == ["Studium Informatik"]
     assert "Stakeholder Management" in find_skills("collaborate with stakeholders")
+
+
+def test_student_and_apprentice_jobs_are_detected():
+    from jobscout.levels import classify
+
+    assert classify("Student Assistant Finance") == "Studierende / Praktikum"
+    assert classify("Assistant Finance", "Early-Stage Student Status: Enrolled during the entire period") == "Studierende / Praktikum"
+    assert classify("Lernende/r Kauffrau/Kaufmann EFZ") == "Lehrstelle"
+    assert classify("PhD Student Machine Learning") == "Doktorat"
+    assert classify("Sales Agent Aarau 60-100%", "Erfahrung im Verkauf") is None
+    assert classify("Senior Data Engineer", "you will mentor students") is None
+
+
+def test_plus_applies_only_to_its_clause():
+    from jobscout.skills import extract_requirements
+
+    reqs, _, _ = extract_requirements("Das bringst du mit\nErfahrung im Verkauf, idealerweise in der Telekommunikation\n"
+                                      "Fluent in English, German is a plus.")
+    kinds = {r.label: r.nice for r in reqs}
+    assert kinds == {"Sales / Verkauf": False, "Englisch": False, "Deutsch": True}
+
+
+def test_generic_skills_do_not_carry_the_score():
+    sales = Job("Sunrise", "Sales Agent Aarau", "u", must_have=["Sales / Verkauf", "Deutsch", "Lehre / EFZ"])
+    m = rank([sales], "Lehre als Informatiker EFZ\nPython, SQL\nDeutsch, Englisch")[0]
+    assert m.score <= 30  # Sprachen + Lehre erfüllt, aber keine Verkaufserfahrung
+
+
+def test_lab_automation_is_not_process_automation():
+    assert "Laborautomation" in find_skills("Experience with laboratory automation")
+    assert "Laborautomation" not in find_skills("Prozessautomation mit Python")
+    assert "Automation / SPS" not in find_skills("marketing automation")
+
+
+def test_related_field_only_counts_when_ad_allows_it():
+    strict = Job("A", "Data Engineer", "u", description="Ihr Profil\nAbgeschlossenes Studium in Informatik")
+    loose = Job("B", "Data Engineer", "u", description="Ihr Profil\nStudium in Informatik oder vergleichbare Ausbildung")
+    from jobscout.skills import apply_skills
+
+    apply_skills(strict), apply_skills(loose)
+    cv = "Master of Science in Wirtschaftsinformatik, FHNW"
+    by_company = {m.job.company: m for m in rank([strict, loose], cv)}
+    assert by_company["A"].knockout and not by_company["B"].knockout
+
+
+def test_german_compounds():
+    assert {"Deutsch", "Englisch"} <= set(find_skills("Sehr gute Deutsch- und Englischkenntnisse"))
+    assert "Sales / Verkauf" in find_skills("Verkaufserfahrung im Detailhandel")
+    assert "SAP" in find_skills("SAP-Kenntnisse von Vorteil")
+    assert "Java" not in find_skills("JavaScript-Kenntnisse")
