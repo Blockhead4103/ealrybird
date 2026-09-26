@@ -11,6 +11,7 @@ from jobscout.config import add_company, env, load_companies
 from jobscout.cv import pdf_to_text
 from jobscout.detect import detect
 from jobscout.emailer import build_email, send
+from jobscout.matcher import cv_profile
 from jobscout.pipeline import find_jobs, match_cv
 
 logging.basicConfig(level=logging.INFO)
@@ -52,6 +53,10 @@ with tab_search:
         include_student = st.checkbox("Auch Stellen für Studierende, Praktika, Lehrstellen, Doktorat", value=False)
     with col2:
         cv_file = st.file_uploader("Dein CV (PDF)", type=["pdf"])
+        extra_skills = st.text_input("Zusätzlich im CV nicht erkannt, aber vorhanden (optional)",
+                                     placeholder="Führungserfahrung, Projektmanagement",
+                                     help="Wird wie ein Teil deines CVs behandelt. Nutze die Begriffe, die unten unter "
+                                          "'Fehlt' stehen.")
         email_to = st.text_input("E-Mail für die Resultate", placeholder="du@example.ch")
         top_n = st.slider("Wie viele Top-Treffer mailen?", 5, 50, 15)
         min_score = st.slider("Mindest-Match (%)", 0, 100, 50,
@@ -84,6 +89,14 @@ with tab_search:
             st.warning("Aus dem PDF liess sich kein Text lesen (gescanntes Bild?). Bitte CV als Text-PDF exportieren.")
 
         if cv_text:
+            if extra_skills.strip():
+                cv_text = cv_text + "\n" + extra_skills.replace(",", "\n")
+            with st.expander("Was JobScout in deinem CV erkannt hat"):
+                profile = sorted(cv_profile(cv_text))
+                st.markdown(", ".join(profile) or "– nichts erkannt –")
+                st.caption("Fehlt hier etwas, das du kannst? Oben bei 'Zusätzlich … vorhanden' eintragen. "
+                           "Unten der Text, den JobScout aus deinem PDF lesen konnte:")
+                st.text(cv_text[:3000] + (" …" if len(cv_text) > 3000 else ""))
             all_matches = match_cv(jobs, cv_text, top=len(jobs))
             matches = [m for m in all_matches if m.score >= min_score]
             st.subheader(f"Rangliste nach Übereinstimmung mit deinem CV ({len(matches)})")

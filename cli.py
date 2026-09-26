@@ -11,6 +11,7 @@ from pathlib import Path
 
 from jobscout.cv import pdf_to_text
 from jobscout.emailer import build_email, send
+from jobscout.matcher import cv_profile
 from jobscout.pipeline import find_jobs, match_cv
 
 
@@ -20,6 +21,7 @@ def main() -> None:
     parser.add_argument("--days", type=int, default=14, help="nicht älter als X Tage")
     parser.add_argument("--cv", type=Path, help="CV als PDF")
     parser.add_argument("--email", help="Empfänger-Adresse (ohne = nur Ausgabe)")
+    parser.add_argument("--zusatz-skills", default="", help='im CV nicht erkannte Skills, z.B. "Führungserfahrung, Projektmanagement"')
     parser.add_argument("--top", type=int, default=15)
     parser.add_argument("--min-score", type=float, default=50, help="Mindest-Match in %% (Standard 50)")
     parser.add_argument("--mit-studentenjobs", action="store_true", help="auch Studierende/Praktika/Lehrstellen/Doktorat")
@@ -39,7 +41,9 @@ def main() -> None:
             print(f"- {j.title} | {j.company} | {j.effective_date} | Must-Have: {', '.join(j.must_have)}\n  {j.url}")
         return
 
-    matches = match_cv(jobs, pdf_to_text(args.cv.read_bytes()), min_score=args.min_score, top=args.top)
+    cv_text = pdf_to_text(args.cv.read_bytes()) + "\n" + args.zusatz_skills.replace(",", "\n")
+    print("Im CV erkannt:", ", ".join(sorted(cv_profile(cv_text))) or "–")
+    matches = match_cv(jobs, cv_text, min_score=args.min_score, top=args.top)
     for m in matches:
         print(f"{m.score:5.1f}%  {m.job.title} | {m.job.company}\n        fehlt: {', '.join(m.missing) or '–'}\n        {m.job.url}")
     if args.email and matches:

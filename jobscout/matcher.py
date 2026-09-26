@@ -24,7 +24,7 @@ from __future__ import annotations
 import re
 
 from .models import Job, Match, Requirement
-from .skills import RELATED_FIELDS, cv_degree_fields, find_skills
+from .skills import RELATED_FIELDS, cv_degree_fields, find_cv_skills, find_skills
 
 KNOCKOUT_CAP = 40.0
 NO_CORE_CAP = 30.0
@@ -40,7 +40,7 @@ def _title_words(title: str) -> set[str]:
 
 
 def cv_profile(cv_text: str) -> set[str]:
-    return set(find_skills(cv_text)) | set(cv_degree_fields(cv_text))
+    return set(find_cv_skills(cv_text)) | set(cv_degree_fields(cv_text))
 
 
 def _requirements(job: Job) -> list[Requirement]:

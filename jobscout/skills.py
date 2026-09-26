@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import unicodedata
 from functools import lru_cache
 
 import requests
@@ -54,11 +55,16 @@ SKILLS: dict[str, list[str]] = {
     "SAP": ["sap", "s/4hana", "s4hana"], "Salesforce": ["salesforce"], "ServiceNow": ["servicenow"],
     "Dynamics 365": ["dynamics 365", "microsoft dynamics"], "Jira": ["jira"], "Confluence": ["confluence"],
     # Methoden / Rollen
-    "Scrum / Agile": ["scrum", "agile", "agil", "kanban", "scaled agile"], "Projektmanagement": ["projektmanagement", "project management", "projektleitung"],
+    "Scrum / Agile": ["scrum", "agile", "agil", "kanban", "scaled agile"], "Projektmanagement": ["projektmanagement", "project management", "projektleitung", "projektleiter", "projektleiterin",
+                          "project manager", "project lead", "projektverantwortung"],
     "PMP / Prince2": ["pmp", "prince2", "hermes"], "ITIL": ["itil"], "Requirements Engineering": ["requirements engineering", "anforderungsmanagement", "business analysis"],
     "UX/UI Design": ["ux", "ui design", "user experience", "figma"], "Testautomatisierung": ["testautomatisierung", "test automation", "selenium", "cypress"],
-    "Führungserfahrung": ["führungserfahrung", "leadership", "people management", "führung von teams", "teamleitung"],
-    "Stakeholder Management": ["stakeholder management", "stakeholdermanagement", "stakeholder"],
+    "Führungserfahrung": ["führungserfahrung", "leadership", "people management", "führung von teams", "teamleitung",
+                          "führungsverantwortung", "führungsfunktion", "führungsposition", "personalführung",
+                          "mitarbeiterführung", "personalverantwortung", "linienverantwortung", "people leadership",
+                          "line management", "team lead", "team leader", "teamleiter", "teamleiterin"],
+    "Stakeholder Management": ["stakeholder management", "stakeholdermanagement", "stakeholder", "anspruchsgruppen",
+                               "interessengruppen", "schnittstellenmanagement"],
     "Change Management": ["change management", "change-management"], "Lean / Six Sigma": ["lean", "six sigma"],
     # Finanzen / Wirtschaft
     "Rechnungswesen": ["rechnungswesen", "buchhaltung", "accounting"], "Controlling": ["controlling", "controller"],
@@ -203,13 +209,52 @@ def _degree_patterns() -> list[tuple[str, re.Pattern]]:
 
 
 def _normalize(text: str) -> str:
-    return (text or "").replace("\u2019", "'").replace("\u2018", "'").replace("\xa0", " ")
+    # NFKC: PDFs liefern "ü" oft als "u" + "¨" und "fi" als Ligatur – beides sonst unauffindbar
+    text = unicodedata.normalize("NFKC", text or "")
+    return text.replace("\u2019", "'").replace("\u2018", "'").replace("\xa0", " ")
 
 
 def find_skills(text: str) -> list[str]:
     """Alle bekannten Skills, die im Text vorkommen (Reihenfolge wie im Wörterbuch)."""
     text = _normalize(text)
     return [name for name, pattern in _patterns() if pattern.search(text)]
+
+
+# Zusätzliche Belege, die NUR im CV gesucht werden: Im CV steht selten "Führungserfahrung",
+# sondern "Teamleiter", "Head of …" oder "Leitung eines Teams von 8 Personen". Im Inserat wären
+# manche davon irreführend (z.B. "Sie berichten an den Head of Finance").
+CV_EVIDENCE: dict[str, str] = {
+    "Führungserfahrung": (
+        r"head of|abteilungsleiter\w*|bereichsleiter\w*|gruppenleiter\w*|teamleiter\w*|leiter(?:in)? \w+|"
+        r"geschäftsführer\w*|managing director|ceo|cfo|cto|coo|cio|chief \w+ officer|direct reports|"
+        r"(?:leitung|führung) (?:eines|des|von|meines) (?:\w+ )?teams?|(?:managed|led|leading|managing) (?:a |an )?(?:\w+ )?team|"
+        r"team (?:von|of) \d+|\d+ direct reports|"
+        # "Führung von 6 Mitarbeitenden" ja – "Firma mit 500 Mitarbeitenden" (Firmengrösse) nein
+        r"(?:führung|leitung|verantwortung|verantwortlich) (?:von|für|über) \d+ (?:mitarbeitende\w*|mitarbeiter\w*|personen|fte)"
+    ),
+    "Projektmanagement": (
+        r"projektleiter\w*|teilprojektleiter\w*|projektmanager\w*|project manager|project lead\w*|programm?leiter\w*|"
+        r"program(?:me)? manager|pmo|(?:leitete|führte|verantwortete) (?:\w+ )?projekte?|(?:led|managed) (?:\w+ )?projects?|"
+        r"verantwortlich für (?:\w+ )?projekte?|projektverantwortlich\w*"
+    ),
+    "Stakeholder Management": (
+        r"stakeholder\w*|anspruchsgruppen|interessengruppen|schnittstellenfunktion|schnittstelle (?:zu|zwischen|zur)|"
+        r"geschäftsleitung|verwaltungsrat|executive (?:board|management|committee)|senior management|c-level"
+    ),
+}
+
+
+@lru_cache(maxsize=1)
+def _cv_evidence_patterns() -> list[tuple[str, re.Pattern]]:
+    return [(name, re.compile(rf"(?<!\w)(?:{rx})(?!\w)", re.IGNORECASE)) for name, rx in CV_EVIDENCE.items()]
+
+
+def find_cv_skills(cv_text: str) -> list[str]:
+    """Skills im CV: Wörterbuch + CV-typische Belege (Rollen, Teamgrössen …)."""
+    found = find_skills(cv_text)
+    text = _normalize(cv_text)
+    found += [name for name, pattern in _cv_evidence_patterns() if name not in found and pattern.search(text)]
+    return found
 
 
 def find_degree_fields(line: str) -> list[str]:

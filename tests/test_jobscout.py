@@ -373,3 +373,35 @@ def test_german_compounds():
     assert "Sales / Verkauf" in find_skills("Verkaufserfahrung im Detailhandel")
     assert "SAP" in find_skills("SAP-Kenntnisse von Vorteil")
     assert "Java" not in find_skills("JavaScript-Kenntnisse")
+
+
+@pytest.mark.parametrize("cv_line,skill", [
+    ("Teamleiter mit 8 Mitarbeitenden", "Führungserfahrung"),
+    ("Head of Risk, 5 direct reports", "Führungserfahrung"),
+    ("Leitung eines Teams von 12 Personen", "Führungserfahrung"),
+    ("Führung von 6 Mitarbeitenden", "Führungserfahrung"),
+    ("Projektleiter Digitalisierung", "Projektmanagement"),
+    ("Verantwortlich für Projekte im Risikobereich", "Projektmanagement"),
+    ("Schnittstelle zur Geschäftsleitung", "Stakeholder Management"),
+])
+def test_cv_evidence(cv_line, skill):
+    from jobscout.skills import find_cv_skills
+
+    assert skill in find_cv_skills(cv_line)
+
+
+def test_cv_evidence_false_friends():
+    from jobscout.skills import find_cv_skills
+
+    assert "Führungserfahrung" not in find_cv_skills("Bank mit 500 Mitarbeitenden, Event für 200 Personen")
+    assert "Führungserfahrung" not in find_skills("Sie berichten an den Head of Finance")  # Inserat
+
+
+def test_pdf_text_cleanup():
+    import unicodedata
+
+    from jobscout.cv import clean_text
+
+    text = clean_text(unicodedata.normalize("NFD", "Führungserfahrung\nProjekt-\nleiter"))
+    assert "Führungserfahrung" in text and "Projektleiter" in text
+    assert "Führungserfahrung" in find_skills(unicodedata.normalize("NFD", "Führungserfahrung"))
