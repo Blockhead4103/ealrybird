@@ -104,9 +104,31 @@ python cli.py --titles "Data Engineer, Data Analyst" --days 2 --cv MeinCV.pdf --
 
 Der Computer muss zu dieser Zeit eingeschaltet sein.
 
-> **Warum nicht einfach online (Streamlit Cloud)?** Geht grundsätzlich gratis, aber: (1) jeder mit dem Link könnte über
-> dein E-Mail-Konto Mails auslösen, (2) dort hinzugefügte Firmen gehen beim Neustart verloren, (3) dein CV läge auf
-> fremden Servern. Für den Privatgebrauch ist lokal einfacher und sicherer.
+---
+
+## Online stellen (gratis, Streamlit Community Cloud)
+
+**Warum nicht Vercel?** Vercel führt Python nur als kurzlebige "Serverless Functions" aus. Eine Streamlit-App braucht
+aber einen dauerhaft laufenden Server mit stehender Verbindung zum Browser (WebSocket), und das Scrapen dauert länger
+als die Zeitlimits solcher Funktionen. Ausserdem wäre das Dateisystem dort schreibgeschützt. Streamlit Community Cloud
+ist genau für solche Apps gemacht. (Stand der Anbieter-Angebote bitte selbst prüfen, sie ändern sich.)
+
+1. Auf <https://share.streamlit.io> mit GitHub anmelden → **Create app** → Repository `ealrybird`, Branch wählen,
+   Hauptdatei `app.py`.
+2. Unter **Advanced settings → Secrets** den Inhalt von `.streamlit/secrets.toml.example` einfügen und ausfüllen.
+   **Unbedingt `APP_PASSWORD` und `ALLOWED_EMAILS` setzen**, sonst kann jeder mit dem Link die App benutzen und
+   über dein E-Mail-Konto Mails verschicken.
+3. **Deploy** klicken. Nach ein paar Minuten bekommst du eine Adresse wie `https://….streamlit.app`.
+
+Das musst du online beachten:
+- **Firmen dauerhaft speichern:** In der App hinzugefügte Firmen gehen bei jedem Neustart verloren. Die App zeigt dir
+  nach dem Hinzufügen den Eintrag an: Kopiere ihn auf GitHub in `companies.yaml` (Datei öffnen → Stift-Symbol →
+  einfügen → *Commit changes*). Die App aktualisiert sich danach automatisch.
+- **Datum "zuerst gesehen"** wird online ebenfalls bei jedem Neustart zurückgesetzt.
+- **Dein CV** wird zur Verarbeitung auf die Server von Streamlit hochgeladen. JobScout speichert es nicht,
+  es liegt aber während der Sitzung dort im Arbeitsspeicher.
+- **Täglicher Automatik-Versand** läuft online nicht, weil die Gratis-App nach einer Weile ohne Besuch schlafen geht.
+  Dafür die lokale Variante oben nutzen.
 
 ---
 

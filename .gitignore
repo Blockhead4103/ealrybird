@@ -6,3 +6,4 @@ venv/
 data/
 *.pdf
 .pytest_cache/
+.streamlit/secrets.toml

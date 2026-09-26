@@ -1,9 +1,11 @@
 """Streamlit-Oberfläche. Start:  streamlit run app.py"""
 from __future__ import annotations
 
+import hmac
 import logging
 
 import streamlit as st
+import yaml
 
 from jobscout.config import add_company, env, load_companies
 from jobscout.cv import pdf_to_text
@@ -21,6 +23,20 @@ def where(job) -> str:
 
 
 st.caption("Durchsucht Karriereseiten Schweizer Firmen, erkennt Must-Have-Skills und gleicht sie mit deinem CV ab.")
+
+# Schutz für den Online-Betrieb: Ist APP_PASSWORD gesetzt, muss es zuerst eingegeben werden.
+app_password = env("APP_PASSWORD")
+if app_password and not st.session_state.get("authenticated"):
+    entered = st.text_input("Passwort", type="password")
+    if entered and hmac.compare_digest(entered, app_password):
+        st.session_state["authenticated"] = True
+        st.rerun()
+    elif entered:
+        st.error("Falsches Passwort.")
+    st.stop()
+
+# Ist ALLOWED_EMAILS gesetzt (Komma-getrennt), darf nur an diese Adressen gesendet werden.
+allowed_emails = {e.strip().lower() for e in env("ALLOWED_EMAILS").split(",") if e.strip()}
 
 tab_search, tab_add, tab_list = st.tabs(["Suche", "Firma hinzufügen", "Firmenliste"])
 
@@ -74,6 +90,8 @@ with tab_search:
             if st.button("Top-Treffer per E-Mail senden"):
                 if not email_to:
                     st.error("Bitte E-Mail-Adresse eingeben.")
+                elif allowed_emails and email_to.strip().lower() not in allowed_emails:
+                    st.error("An diese Adresse darf nicht gesendet werden (siehe ALLOWED_EMAILS).")
                 else:
                     titles, age = st.session_state["search"]
                     try:
@@ -90,6 +108,8 @@ with tab_search:
                     st.markdown(f"**Nice-to-have:** {', '.join(j.nice_to_have) or '–'}")
 
 with tab_add:
+    st.info("Online (z.B. Streamlit Cloud) gehen hier hinzugefügte Firmen beim Neustart der App verloren. "
+            "Dauerhaft: den angezeigten Eintrag in companies.yaml auf GitHub eintragen.")
     st.write("Füge die URL der Karriereseite ein. Die App erkennt, welches Bewerbersystem die Firma nutzt.")
     url = st.text_input("Karriereseite-URL", placeholder="https://www.firma.ch/karriere")
     if st.button("Erkennen") and url:
@@ -116,7 +136,8 @@ with tab_add:
                     entry["domain"] = found["domain"]
                 try:
                     add_company(entry)
-                    st.success(f"{name} hinzugefügt.")
+                    st.success(f"{name} hinzugefügt. Eintrag für companies.yaml (zum Kopieren):")
+                    st.code(yaml.safe_dump([entry], allow_unicode=True, sort_keys=False), language="yaml")
                     st.session_state.pop("detected", None)
                 except ValueError as exc:
                     st.error(str(exc))
