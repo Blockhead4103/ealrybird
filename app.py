@@ -8,7 +8,7 @@ import streamlit as st
 import yaml
 
 from jobscout.config import add_company, env, load_companies
-from jobscout.cv import pdf_to_text
+from jobscout.cv import pdf_to_text, skills_file_to_text
 from jobscout.detect import detect
 from jobscout.emailer import build_email, send
 from jobscout.matcher import cv_profile
@@ -44,7 +44,9 @@ tab_search, tab_add, tab_list = st.tabs(["Suche", "Firma hinzufügen", "Firmenli
 with tab_search:
     col1, col2 = st.columns(2)
     with col1:
-        titles_raw = st.text_input("Jobtitel (mehrere mit Komma trennen)", placeholder="Data Engineer, Business Analyst")
+        titles_raw = st.text_input("Jobtitel (mehrere mit Komma trennen)", placeholder="Risk Manager, Head of Risk")
+        exclude_raw = st.text_input("Titel ausschliessen (Wortteile, mit Komma)", placeholder="Elektr, Verkauf, Pflege",
+                                    help='"Elektr" schliesst Elektriker, Elektroinstallateur, Elektroplaner usw. aus.')
         max_age = st.number_input("Nicht älter als (Tage)", min_value=1, max_value=365, value=14)
         min_employees = st.number_input("Mindestens Mitarbeitende", min_value=0, value=100, step=50,
                                         help="Firmen ohne Angabe in companies.yaml werden immer durchsucht.")
@@ -53,6 +55,9 @@ with tab_search:
         include_student = st.checkbox("Auch Stellen für Studierende, Praktika, Lehrstellen, Doktorat", value=False)
     with col2:
         cv_file = st.file_uploader("Dein CV (PDF)", type=["pdf"])
+        skills_file = st.file_uploader("Deine Skill-Liste (optional, .txt oder .csv)", type=["txt", "csv"],
+                                       help="Eine Skill pro Zeile oder mit Komma getrennt. CSV: Spalte 'Name' oder 'Skill'. "
+                                            "Wird zusammen mit dem CV ausgewertet.")
         extra_skills = st.text_input("Zusätzlich im CV nicht erkannt, aber vorhanden (optional)",
                                      placeholder="Führungserfahrung, Projektmanagement",
                                      help="Wird wie ein Teil deines CVs behandelt. Nutze die Begriffe, die unten unter "
@@ -68,12 +73,17 @@ with tab_search:
 
     if st.button("Suchen", type="primary"):
         titles = [t.strip() for t in titles_raw.split(",") if t.strip()]
+        exclude = [e.strip() for e in exclude_raw.split(",") if e.strip()]
+        if not titles:
+            st.warning("Kein Jobtitel angegeben: Es werden ALLE Stellen aller Firmen durchsucht (auch fachfremde). "
+                       "Das dauert länger und bringt mehr unpassende Treffer.")
         if not load_companies(min_employees=min_employees):
             st.error("Keine Firmen in companies.yaml (mit genug Mitarbeitenden). Zuerst im Reiter 'Firma hinzufügen' Firmen erfassen.")
             st.stop()
         with st.status("Durchsuche Karriereseiten …", expanded=True) as status:
             jobs, errors = find_jobs(titles, int(max_age), use_llm=use_llm, min_employees=int(min_employees),
-                                     progress=st.write, swiss_only=swiss_only, include_student_jobs=include_student)
+                                     progress=st.write, swiss_only=swiss_only, include_student_jobs=include_student,
+                                     exclude=exclude)
             status.update(label=f"{len(jobs)} Stellen gefunden", state="complete", expanded=bool(errors))
         st.session_state["jobs"] = jobs
         st.session_state["search"] = (titles, int(max_age))
@@ -89,6 +99,8 @@ with tab_search:
             st.warning("Aus dem PDF liess sich kein Text lesen (gescanntes Bild?). Bitte CV als Text-PDF exportieren.")
 
         if cv_text:
+            if skills_file:
+                cv_text = cv_text + "\n" + skills_file_to_text(skills_file.getvalue(), skills_file.name)
             if extra_skills.strip():
                 cv_text = cv_text + "\n" + extra_skills.replace(",", "\n")
             with st.expander("Was JobScout in deinem CV erkannt hat"):
@@ -108,7 +120,7 @@ with tab_search:
                 flag = "⚠️ " if m.knockout else ""
                 with st.expander(f"{flag}{m.score:.0f}% · {j.title} – {j.company}{where(j)}"):
                     for ko in m.knockout:
-                        st.error(f"Ausschlusskriterium – {ko}. Dieser Abschluss wurde in deinem CV nicht gefunden.")
+                        st.error(f"Ausschlusskriterium – {ko}. Das wurde in deinem CV nicht gefunden.")
                     st.markdown(f"[Zum Inserat]({j.url}) · Datum: {j.effective_date or 'unbekannt'}"
                                 + ("" if j.posted else " *(erstes Auftauchen, kein Datum im Inserat)*"))
                     st.markdown(f"**Must-Have:** {', '.join(j.must_have) or '– (keine erkannt)'}")

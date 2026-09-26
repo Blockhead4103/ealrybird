@@ -149,6 +149,40 @@ RELATED_WORDS = re.compile(
     re.IGNORECASE,
 )
 DEGREE_LEVEL_SKILLS = {"Hochschulabschluss", "Doktorat / PhD", "Eidg. Fachausweis", "Lehre / EFZ"}
+# Verlangter Beruf aus einer Berufslehre: "Lehre als Elektroinstallateur EFZ", "Montage-Elektriker EFZ",
+# "Ausbildung zur Fachfrau Gesundheit". Allgemein, ohne Wörterbuch: der Berufsname muss im CV vorkommen.
+TRADE_PATTERNS = [
+    re.compile(r"(?<!\w)([A-ZÄÖÜ][\w\-/]{3,})\s+(?:EFZ|EBA)(?!\w)"),
+    # optional ein zweites grossgeschriebenes Wort: "Fachfrau Gesundheit", "Fachmann Betriebsunterhalt"
+    re.compile(r"(?<!\w)(?:grundausbildung|berufslehre|lehre|ausbildung)\s+(?:als|zum|zur)\s+"
+               r"([A-ZÄÖÜ][\w\-/]{3,}(?:\s+(?!EFZ|EBA)[A-ZÄÖÜ][\w\-]{3,})?)", re.IGNORECASE),
+]
+TRADE_STOP = {"Abschluss", "Bereich", "Richtung", "Branche", "Umfeld", "Lehre", "Ausbildung", "Grundausbildung"}
+HIGHER_ED = re.compile(r"(?<!\w)(studium|hochschul\w*|universit\w*|fh|uni|eth|bachelor|master|hf|höhere fachschule)(?!\w)",
+                       re.IGNORECASE)
+
+
+def find_trades(line: str) -> list[str]:
+    """Verlangte Lehrberufe in einer Zeile – leer, wenn ein Studium als Alternative genannt ist."""
+    line = _normalize(line)
+    if HIGHER_ED.search(line):
+        return []
+    found: list[str] = []
+    for pattern in TRADE_PATTERNS:
+        for m in pattern.finditer(line):
+            name = m.group(1).strip("-/")
+            if name not in TRADE_STOP and name not in found:
+                found.append(name)
+    # "Gesundheit" ist nur ein Teil von "Fachfrau Gesundheit" -> weglassen
+    return [f for f in found if not any(f != g and f in g.split() for g in found)]
+
+
+def trade_in_cv(trade: str, cv_text: str) -> bool:
+    """"Montage-Elektriker" findet auch "Montageelektriker"; "Kauffrau/Kaufmann" jede der Formen."""
+    cv = re.sub(r"[\s\-]", "", _normalize(cv_text).lower())
+    return any(re.sub(r"[\s\-]", "", form.lower()) in cv for form in trade.split("/") if len(form) >= 4)
+
+
 OR_WORDS = re.compile(r"(?<!\w)(or|oder|ou|o|bzw\.?|resp\.?)(?!\w)|/", re.IGNORECASE)
 
 REQUIREMENT_HEADINGS = [
@@ -225,7 +259,7 @@ def find_skills(text: str) -> list[str]:
 # manche davon irreführend (z.B. "Sie berichten an den Head of Finance").
 CV_EVIDENCE: dict[str, str] = {
     "Führungserfahrung": (
-        r"head of|abteilungsleiter\w*|bereichsleiter\w*|gruppenleiter\w*|teamleiter\w*|leiter(?:in)? \w+|"
+        r"führung|leitung|personalführung|head of|abteilungsleiter\w*|bereichsleiter\w*|gruppenleiter\w*|teamleiter\w*|leiter(?:in)? \w+|"
         r"geschäftsführer\w*|managing director|ceo|cfo|cto|coo|cio|chief \w+ officer|direct reports|"
         r"(?:leitung|führung) (?:eines|des|von|meines) (?:\w+ )?teams?|(?:managed|led|leading|managing) (?:a |an )?(?:\w+ )?team|"
         r"team (?:von|of) \d+|\d+ direct reports|"
@@ -355,6 +389,10 @@ def _line_requirements(line: str) -> list[Requirement]:
         return reqs
     levels = [s for s in skills if s in DEGREE_LEVEL_SKILLS]
     others = [s for s in skills if s not in DEGREE_LEVEL_SKILLS]
+    trades = find_trades(line)
+    if trades:  # konkreter Beruf statt nur "irgendeine Lehre"
+        reqs.append(Requirement(options=[f"Lehre als {t}" for t in trades], text=line, nice=line_nice, kind="trade"))
+        levels = []
     if levels:  # "Abgeschlossene Lehre oder Studium" -> eine Anforderung
         reqs.append(Requirement(options=levels, text=line, nice=nice_for(levels), kind="degree"))
     if len(others) > 1 and OR_WORDS.search(line):

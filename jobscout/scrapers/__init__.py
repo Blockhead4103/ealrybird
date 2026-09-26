@@ -31,9 +31,10 @@ def scrape_all(
     titles: list[str],
     progress: Callable[[str], None] | None = None,
     swiss_only: bool = True,
+    exclude: list[str] | None = None,
 ) -> tuple[list[Job], list[str]]:
     """Scrapt alle Firmen parallel (4 gleichzeitig). Gibt (Jobs, Fehlermeldungen) zurück."""
-    wanted = JobFilter(titles, swiss_only)
+    wanted = JobFilter(titles, swiss_only, exclude)
     jobs: list[Job] = []
     errors: list[str] = []
 

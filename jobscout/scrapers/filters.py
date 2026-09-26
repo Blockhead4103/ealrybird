@@ -31,15 +31,19 @@ class JobFilter:
     ("Data Engineer" passt auf "Senior Data Engineer (m/w/d)") und – falls swiss_only –
     der Ort nicht eindeutig ausserhalb der Schweiz liegt. Leere Titelliste = alle Titel."""
 
-    def __init__(self, titles: list[str], swiss_only: bool = True):
+    def __init__(self, titles: list[str], swiss_only: bool = True, exclude: list[str] | None = None):
         self.titles = [t.strip() for t in titles if t.strip()]
         self.swiss_only = swiss_only
         self._terms = [re.findall(r"\w+", t.lower()) for t in self.titles]
+        # Ausschlusswörter: "Elektr" schliesst Elektriker, Elektroinstallateur, Elektroplaner aus
+        self.exclude = [e.strip().lower() for e in (exclude or []) if e.strip()]
 
     def title_ok(self, title: str) -> bool:
+        low = title.lower()
+        if any(e in low for e in self.exclude):
+            return False
         if not self._terms:
             return bool(title.strip())
-        low = title.lower()
         return any(all(w in low for w in term) for term in self._terms)
 
     def location_ok(self, location: str) -> bool:

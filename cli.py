@@ -9,7 +9,7 @@ import argparse
 import logging
 from pathlib import Path
 
-from jobscout.cv import pdf_to_text
+from jobscout.cv import pdf_to_text, skills_file_to_text
 from jobscout.emailer import build_email, send
 from jobscout.matcher import cv_profile
 from jobscout.pipeline import find_jobs, match_cv
@@ -21,6 +21,8 @@ def main() -> None:
     parser.add_argument("--days", type=int, default=14, help="nicht älter als X Tage")
     parser.add_argument("--cv", type=Path, help="CV als PDF")
     parser.add_argument("--email", help="Empfänger-Adresse (ohne = nur Ausgabe)")
+    parser.add_argument("--skills-datei", type=Path, help="Skill-Liste als .txt oder .csv")
+    parser.add_argument("--ohne", default="", help='Titel ausschliessen (Wortteile), z.B. "Elektr, Verkauf"')
     parser.add_argument("--zusatz-skills", default="", help='im CV nicht erkannte Skills, z.B. "Führungserfahrung, Projektmanagement"')
     parser.add_argument("--top", type=int, default=15)
     parser.add_argument("--min-score", type=float, default=50, help="Mindest-Match in %% (Standard 50)")
@@ -33,7 +35,8 @@ def main() -> None:
 
     titles = [t.strip() for t in args.titles.split(",") if t.strip()]
     jobs, errors = find_jobs(titles, args.days, use_llm=args.llm, min_employees=args.min_employees, progress=print,
-                              swiss_only=not args.weltweit, include_student_jobs=args.mit_studentenjobs)
+                              swiss_only=not args.weltweit, include_student_jobs=args.mit_studentenjobs,
+                              exclude=[e.strip() for e in args.ohne.split(",") if e.strip()])
     print(f"\n{len(jobs)} Stellen gefunden, {len(errors)} Quellen mit Fehlern.\n")
 
     if not args.cv:
@@ -42,6 +45,8 @@ def main() -> None:
         return
 
     cv_text = pdf_to_text(args.cv.read_bytes()) + "\n" + args.zusatz_skills.replace(",", "\n")
+    if args.skills_datei:
+        cv_text += "\n" + skills_file_to_text(args.skills_datei.read_bytes(), args.skills_datei.name)
     print("Im CV erkannt:", ", ".join(sorted(cv_profile(cv_text))) or "–")
     matches = match_cv(jobs, cv_text, min_score=args.min_score, top=args.top)
     for m in matches:

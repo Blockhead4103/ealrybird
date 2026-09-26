@@ -21,7 +21,7 @@ besten Treffer per **E-Mail**.
 | Studierende, Praktika, Lehrstellen, Doktorat | Werden standardmässig **ausgeblendet** (erkannt am Titel, z.B. "Intern", "Werkstudent", "Lernende", oder an Sätzen wie "enrolled in a Bachelor's program"). Häkchen in der App bzw. `--mit-studentenjobs` zeigt sie. | Stellen, die sich nur indirekt an Studierende richten, können durchrutschen. |
 
 > **Stand der Prüfung:** Alle Teile sind mit simulierten Antworten der Anbieter und mit einer lokalen Test-Karriereseite
-> automatisch getestet (43 Tests). Gegen die echten Anbieter-Server konnte beim Erstellen **nicht** live getestet werden.
+> automatisch getestet (46 Tests). Gegen die echten Anbieter-Server konnte beim Erstellen **nicht** live getestet werden.
 > Falls eine Quelle einen Fehler meldet, siehst du ihn in der App pro Firma.
 
 ---
@@ -80,7 +80,13 @@ Beim nächsten Mal nur: Terminal → `cd Dokumente/jobscout` → aktivieren (Sch
 2. **Reiter "Suche":** Jobtitel (z.B. `Data Engineer, Business Analyst`), "Nicht älter als" in Tagen, CV hochladen → *Suchen*.
 3. Ergebnis: Stellen sortiert nach Match, mit Must-Have-Skills, was du hast und was dir fehlt.
 4. E-Mail-Adresse eingeben → *Top-Treffer per E-Mail senden*.
-5. **Stimmt ein "Fehlt" nicht?** Öffne *"Was JobScout in deinem CV erkannt hat"*. Dort siehst du die erkannten Skills und
+5. **Fachfremde Stellen?** Immer Jobtitel angeben (ohne Titel wird *alles* durchsucht). Zusätzlich im Feld
+   *"Titel ausschliessen"* Wortteile eintragen, z.B. `Elektr, Verkauf, Pflege` (CLI: `--ohne "..."`).
+   Verlangt ein Inserat einen bestimmten **Lehrberuf** (z.B. "Lehre als Elektroinstallateur EFZ") und steht dieser
+   Beruf nicht in deinem CV, wird die Stelle mit ⚠️ markiert und auf höchstens 40 % begrenzt.
+6. **Skill-Liste hochladen (optional):** `.txt` (eine Skill pro Zeile oder mit Komma) oder `.csv` (Spalte `Name` oder
+   `Skill`). Sie wird zusammen mit dem CV ausgewertet (CLI: `--skills-datei datei.csv`).
+7. **Stimmt ein "Fehlt" nicht?** Öffne *"Was JobScout in deinem CV erkannt hat"*. Dort siehst du die erkannten Skills und
    den Text, den das Tool aus deinem PDF lesen konnte. Fehlt etwas, trage es im Feld *"Zusätzlich im CV nicht erkannt,
    aber vorhanden"* ein (z.B. `Führungserfahrung, Projektmanagement`). Kommandozeile: `--zusatz-skills "..."`.
 

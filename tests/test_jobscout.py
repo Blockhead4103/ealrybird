@@ -405,3 +405,35 @@ def test_pdf_text_cleanup():
     text = clean_text(unicodedata.normalize("NFD", "Führungserfahrung\nProjekt-\nleiter"))
     assert "Führungserfahrung" in text and "Projektleiter" in text
     assert "Führungserfahrung" in find_skills(unicodedata.normalize("NFD", "Führungserfahrung"))
+
+
+def test_required_trade_is_a_knockout():
+    from jobscout.skills import apply_skills, find_trades
+
+    assert find_trades("Abgeschlossene Lehre als Elektroinstallateur EFZ oder Montage-Elektriker EFZ") == [
+        "Elektroinstallateur", "Montage-Elektriker"]
+    assert find_trades("Ausbildung zur Fachfrau Gesundheit EFZ") == ["Fachfrau Gesundheit"]
+    assert find_trades("Kaufmännische Lehre EFZ oder Studium") == []  # Studium als Alternative
+    job = Job("X", "Projektleiter Elektro", "u", description=(
+        "Ihr Profil\nGrundausbildung als Elektroinstallateur EFZ mit Weiterbildung\n"
+        "Erfahrung im Projektmanagement und in der Führung von Teams\nWir bieten"))
+    apply_skills(job)
+    manager = rank([job], "Teamleiter Risk Management, 6 direct reports\nProjektleiter Basel III")[0]
+    assert manager.knockout and manager.score <= 40
+    electrician = rank([job], "Montageelektriker, Elektroinstallateur EFZ\nProjektleiter, Teamleiter")[0]
+    assert not electrician.knockout and electrician.score > 50
+
+
+def test_exclude_titles():
+    from jobscout.scrapers.filters import JobFilter
+
+    f = JobFilter([], exclude=["Elektr", "Verkauf"])
+    assert not f("Elektroinstallateur EFZ") and not f("Projektleiter Elektro") and not f("Verkaufsberater")
+    assert f("Risk Manager")
+
+
+def test_skills_file():
+    from jobscout.cv import skills_file_to_text
+
+    assert skills_file_to_text(b"Name,Endorsements\nRisk Management,5\nLeadership,3\n", "Skills.csv") == "Risk Management\nLeadership"
+    assert skills_file_to_text("Führung; Projektmanagement\nSQL".encode(), "skills.txt") == "Führung\nProjektmanagement\nSQL"

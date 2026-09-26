@@ -24,7 +24,7 @@ from __future__ import annotations
 import re
 
 from .models import Job, Match, Requirement
-from .skills import RELATED_FIELDS, cv_degree_fields, find_cv_skills, find_skills
+from .skills import RELATED_FIELDS, cv_degree_fields, find_cv_skills, find_skills, trade_in_cv
 
 KNOCKOUT_CAP = 40.0
 NO_CORE_CAP = 30.0
@@ -62,6 +62,8 @@ def score_job(job: Job, cv_text: str, cv_have: set[str]) -> Match:
     lower_cv = cv_text.lower()
 
     def has(option: str) -> bool:  # KI-Skills sind freie Begriffe -> zusätzlich Textsuche
+        if option.startswith("Lehre als "):
+            return trade_in_cv(option.removeprefix("Lehre als "), cv_text)
         return option in cv_have or option.lower() in lower_cv
 
     def met(req: Requirement) -> bool:
@@ -107,7 +109,8 @@ def score_job(job: Job, cv_text: str, cv_have: set[str]) -> Match:
     knockout = [
         f"Verlangt: {r.label}"
         for r in must
-        if not met(r) and r.kind == "degree" and any(o.startswith("Studium ") or o == "Doktorat / PhD" for o in r.options)
+        if not met(r) and (r.kind == "trade"
+                           or r.kind == "degree" and any(o.startswith("Studium ") or o == "Doktorat / PhD" for o in r.options))
     ]
     if knockout:
         score = min(score, KNOCKOUT_CAP)
