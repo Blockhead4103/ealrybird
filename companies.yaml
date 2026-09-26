@@ -1,0 +1,33 @@
+# Liste der Firmen, deren Karriereseiten durchsucht werden.
+#
+# Am einfachsten fügst du Firmen in der App im Reiter "Firma hinzufügen" hinzu:
+# Karriereseiten-URL einfügen -> die App erkennt das System und schreibt den Eintrag hier hinein.
+#
+# Felder:
+#   name:      Anzeigename
+#   employees: Anzahl Mitarbeitende (Firmen unter dem Minimum, Standard 100, werden übersprungen).
+#              Quelle z.B. Geschäftsbericht, Firmenwebsite, Handelsregister/Zefix (Zefix nennt KEINE
+#              Mitarbeiterzahl), LinkedIn-Firmenseite (Angabe dort ist eine Spanne).
+#   source:    smartrecruiters | greenhouse | lever | personio | recruitee | workday | jsonld
+#   target:    Firmenkennung beim Anbieter bzw. URL (siehe Beispiele unten)
+#
+# Beispiele fürs FORMAT (Firmennamen und Kennungen sind Platzhalter, nicht echt):
+#   - name: Beispiel AG
+#     employees: 450
+#     source: smartrecruiters
+#     target: BeispielAG                 # aus https://jobs.smartrecruiters.com/BeispielAG
+#   - name: Muster Holding
+#     employees: 2000
+#     source: workday
+#     target: https://muster.wd3.myworkdayjobs.com/de-DE/Careers
+#   - name: Demo GmbH
+#     employees: 150
+#     source: personio
+#     target: demo-gmbh                  # aus https://demo-gmbh.jobs.personio.de
+#     domain: jobs.personio.de           # optional, oder jobs.personio.com
+#   - name: Irgendwas SA
+#     employees: 300
+#     source: jsonld
+#     target: https://www.irgendwas.ch/karriere
+
+companies: []
