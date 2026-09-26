@@ -19,6 +19,7 @@ from functools import lru_cache
 import requests
 
 from .config import DATA_DIR, env
+from .models import Job, Requirement
 
 log = logging.getLogger(__name__)
 
@@ -63,7 +64,14 @@ SKILLS: dict[str, list[str]] = {
     "Rechnungswesen": ["rechnungswesen", "buchhaltung", "accounting"], "Controlling": ["controlling", "controller"],
     "IFRS": ["ifrs"], "Swiss GAAP FER": ["swiss gaap", "gaap fer"], "Treuhand": ["treuhand", "fachausweis treuhand"],
     "Steuern": ["steuern", "tax", "mwst", "mehrwertsteuer"], "Risk Management": ["risk management", "risikomanagement"],
-    "Compliance": ["compliance", "aml", "kyc", "finma"], "Audit": ["audit", "revision", "wirtschaftsprüfung"],
+    "Compliance": ["compliance", "aml", "kyc", "finma"],
+    "Gesellschaftsrecht": ["corporate law", "company law", "gesellschaftsrecht", "aktienrecht", "obligationenrecht", "droit des sociétés"],
+    "Corporate Governance": ["corporate governance", "governance framework", "governance frameworks"],
+    "Company Secretary": ["company secretarial", "company secretary", "corporate secretary", "board secretary", "verwaltungsratssekretariat", "vr-sekretariat"],
+    "Vertragsrecht / Verträge": ["contract law", "vertragsrecht", "contract management", "vertragsmanagement", "contract drafting"],
+    "Rechtsberatung / Legal": ["legal advice", "rechtsberatung", "legal counsel", "litigation", "prozessführung", "legal administration", "corporate legal"],
+    "Datenschutz": ["datenschutz", "data protection", "gdpr", "dsgvo", "revdsg"],
+    "Handelsregister": ["handelsregister", "commercial register", "commercial registers"], "Audit": ["audit", "revision", "wirtschaftsprüfung"],
     "Sales / Verkauf": ["verkauf", "sales", "akquisition", "business development", "key account"],
     "Marketing": ["marketing", "seo", "content marketing", "social media"], "CRM": ["crm"],
     "Einkauf / Procurement": ["einkauf", "procurement", "beschaffung"], "Supply Chain": ["supply chain", "logistik", "logistics"],
@@ -84,17 +92,59 @@ SKILLS: dict[str, list[str]] = {
     "Führerausweis": ["führerausweis", "fahrausweis", "driving licence", "driver's license"],
 }
 
+# Studienrichtungen: werden NUR in Zeilen gesucht, die von Ausbildung sprechen (siehe DEGREE_WORDS),
+# damit z.B. "Swiss corporate law" in einer Erfahrungszeile nicht als Jus-Studium zählt.
+DEGREE_FIELDS: dict[str, list[str]] = {
+    "Studium Recht": ["law", "laws", "rechtswissenschaft", "rechtswissenschaften", "jus", "jura", "lic. iur", "lic.iur",
+                      "mlaw", "blaw", "ll.m", "llm", "legal studies", "juristisch", "juristische", "droit", "giurisprudenza",
+                      "anwaltspatent", "rechtsanwalt", "rechtsanwältin", "attorney at law"],
+    "Studium BWL / Business": ["business administration", "betriebswirtschaft", "betriebswirtschaftslehre", "bwl", "mba",
+                               "business economics", "business management", "management studies", "wirtschaftswissenschaft",
+                               "wirtschaftswissenschaften", "betriebsökonomie", "betriebsökonom"],
+    "Studium VWL / Economics": ["economics", "volkswirtschaft", "volkswirtschaftslehre", "vwl", "ökonomie"],
+    "Studium Finance": ["finance", "finanzen", "banking", "accounting", "rechnungswesen"],
+    "Studium Informatik": ["computer science", "informatik", "informatics", "software engineering"],
+    "Studium Wirtschaftsinformatik": ["wirtschaftsinformatik", "business informatics", "information systems"],
+    "Studium Mathematik / Statistik": ["mathematik", "mathematics", "statistik", "statistics", "data science"],
+    "Studium Physik": ["physik", "physics"],
+    "Studium Ingenieurwesen": ["engineering", "ingenieur", "ingenieurwesen", "ingenieurwissenschaften", "maschinenbau",
+                               "maschineningenieur", "elektrotechnik", "verfahrenstechnik", "bauingenieur"],
+    "Studium Chemie": ["chemistry", "chemie", "chemical engineering"],
+    "Studium Biologie / Life Sciences": ["biology", "biologie", "life sciences", "life science", "biotechnology",
+                                         "biotechnologie", "biochemistry", "biochemie", "molecular biology", "molekularbiologie"],
+    "Studium Pharmazie": ["pharmacy", "pharmazie", "pharmaceutical sciences", "pharmaceutical science"],
+    "Studium Medizin": ["medicine", "medizin", "humanmedizin"],
+    "Studium Pflege": ["nursing", "pflege", "pflegewissenschaft"],
+    "Studium Naturwissenschaften": ["natural sciences", "naturwissenschaften", "naturwissenschaftlich", "naturwissenschaftliches"],
+    "Studium Psychologie": ["psychology", "psychologie"],
+    "Studium Kommunikation": ["communications", "communication", "kommunikation", "journalism", "journalismus"],
+    "Studium HR": ["human resources", "personalmanagement"],
+    "Studium Architektur": ["architecture", "architektur"],
+}
+DEGREE_WORDS = re.compile(
+    r"(?<!\w)(studium|studiengang|studienabschluss|degree|abschluss|hochschul\w*|universit\w*|bachelor|master|diplom\w*|"
+    r"lizentiat|phd|doktorat|lic\.|mba|msc|bsc|ma|ba|ll\.?m|fh|eth|epfl|hsg|lehre|efz|ausbildung|education|graduate|"
+    r"anwaltspatent)(?!\w)",
+    re.IGNORECASE,
+)
+DEGREE_LEVEL_SKILLS = {"Hochschulabschluss", "Doktorat / PhD", "Eidg. Fachausweis", "Lehre / EFZ"}
+OR_WORDS = re.compile(r"(?<!\w)(or|oder|ou|o|bzw\.?|resp\.?)(?!\w)|/", re.IGNORECASE)
+
 REQUIREMENT_HEADINGS = [
     "ihr profil", "dein profil", "ihre qualifikationen", "deine qualifikationen", "anforderungen", "anforderungsprofil",
     "was sie mitbringen", "was du mitbringst", "das bringen sie mit", "das bringst du mit", "sie bringen mit", "du bringst mit",
     "voraussetzungen", "ihre kompetenzen", "deine kompetenzen", "wen wir suchen", "what you bring", "what you'll bring",
     "your profile", "requirements", "qualifications", "who you are", "skills", "must have", "must-have",
     "what we're looking for", "what we are looking for", "about you", "votre profil", "exigences", "il tuo profilo", "requisiti",
+    "essential requirements", "essential and desirable requirements", "minimum requirements", "key requirements",
+    "your background", "your experience", "was sie auszeichnet", "das zeichnet sie aus", "was dich auszeichnet",
+    "das zeichnet dich aus", "dein rucksack", "ihr rucksack", "fachliche anforderungen", "qualifikationen",
 ]
 END_HEADINGS = [
     "wir bieten", "was wir bieten", "unser angebot", "deine vorteile", "ihre vorteile", "benefits", "what we offer",
     "we offer", "why join", "über uns", "about us", "kontakt", "contact", "bewerbung", "nous offrons", "ihre aufgaben",
-    "deine aufgaben", "your tasks", "your responsibilities", "responsibilities", "offriamo",
+    "deine aufgaben", "your tasks", "your responsibilities", "responsibilities", "offriamo", "why ", "warum ",
+    "your key responsibilities", "commitment to diversity", "about the company", "about the team",
 ]
 NICE_MARKERS = [
     "von vorteil", "wünschenswert", "nice to have", "nice-to-have", "ein plus", "is a plus", "a plus", "plus",
@@ -114,30 +164,66 @@ def _load_extra() -> dict[str, list[str]]:
     return extra
 
 
+def _compile(table: dict[str, list[str]]) -> list[tuple[str, re.Pattern]]:
+    compiled = []
+    for name, aliases in table.items():
+        alt = "|".join(re.escape(a) for a in sorted(aliases, key=len, reverse=True))
+        # Wortgrenzen, die auch Sonderzeichen wie C#, C++, .NET erlauben; optionales Mehrzahl-s
+        compiled.append((name, re.compile(rf"(?<![\w]){'(?:' + alt + ')'}s?(?![\w+#])", re.IGNORECASE)))
+    return compiled
+
+
 @lru_cache(maxsize=1)
 def _patterns() -> list[tuple[str, re.Pattern]]:
-    skills = {**SKILLS, **_load_extra()}
-    compiled = []
-    for name, aliases in skills.items():
-        alt = "|".join(re.escape(a) for a in sorted(aliases, key=len, reverse=True))
-        # Wortgrenzen, die auch Sonderzeichen wie C#, C++, .NET erlauben
-        compiled.append((name, re.compile(rf"(?<![\w]){'(?:' + alt + ')'}(?![\w+#])", re.IGNORECASE)))
-    return compiled
+    return _compile({**SKILLS, **_load_extra()})
+
+
+@lru_cache(maxsize=1)
+def _degree_patterns() -> list[tuple[str, re.Pattern]]:
+    return _compile(DEGREE_FIELDS)
+
+
+def _normalize(text: str) -> str:
+    return (text or "").replace("\u2019", "'").replace("\u2018", "'").replace("\xa0", " ")
 
 
 def find_skills(text: str) -> list[str]:
     """Alle bekannten Skills, die im Text vorkommen (Reihenfolge wie im Wörterbuch)."""
-    return [name for name, pattern in _patterns() if pattern.search(text or "")]
+    text = _normalize(text)
+    return [name for name, pattern in _patterns() if pattern.search(text)]
+
+
+def find_degree_fields(line: str) -> list[str]:
+    """Studienrichtungen in einer Zeile – nur wenn die Zeile von Ausbildung spricht."""
+    line = _normalize(line)
+    if not DEGREE_WORDS.search(line):
+        return []
+    return [name for name, pattern in _degree_patterns() if pattern.search(line)]
+
+
+def cv_degree_fields(cv_text: str) -> list[str]:
+    """Studienrichtungen im CV. Das Ausbildungswort darf auch in der Zeile davor stehen,
+    weil PDF-Text oft "Master of Science" und "Informatik, ETH Zürich" auf zwei Zeilen trennt."""
+    lines = _normalize(cv_text).splitlines()
+    found: list[str] = []
+    for i, line in enumerate(lines):
+        window = " ".join(lines[max(0, i - 1) : i + 1])  # diese Zeile + die davor
+        if not DEGREE_WORDS.search(window):
+            continue
+        for name, pattern in _degree_patterns():
+            if name not in found and pattern.search(line):
+                found.append(name)
+    return found
 
 
 def _is_heading(line: str, headings: list[str]) -> bool:
-    clean = line.lower().strip(" :#*-•\t")
+    clean = _normalize(line).lower().strip(" :#*-•\t?!")
     return len(clean) <= 60 and any(clean.startswith(h) or clean == h for h in headings)
 
 
 def requirements_section(text: str) -> str:
     """Schneidet den Anforderungs-Abschnitt aus. Wird keiner gefunden, bleibt der ganze Text."""
-    lines = text.splitlines()
+    lines = _normalize(text).splitlines()
     collected, inside = [], False
     for line in lines:
         if _is_heading(line, REQUIREMENT_HEADINGS):
@@ -156,16 +242,64 @@ def _is_nice(line: str) -> bool:
     return any(re.search(rf"(?<!\w){re.escape(m)}(?!\w)", low) for m in NICE_MARKERS)
 
 
+def _line_requirements(line: str) -> list[Requirement]:
+    """Zerlegt eine Anforderungszeile in Requirements.
+    - Ausbildungszeile mit Studienrichtungen -> EINE Anforderung, jede genannte Richtung genügt
+      ("University degree in Law, Business Administration, or a related discipline").
+    - Zeile mit "oder" / "or" / "/" -> die Skills der Zeile sind Alternativen.
+    - sonst -> jeder Skill ist eine eigene Pflicht ("Deutsch und Englisch")."""
+    nice = _is_nice(line)
+    skills = find_skills(line)
+    fields = find_degree_fields(line)
+    reqs: list[Requirement] = []
+    if fields:
+        # In einer Ausbildungszeile gelten auch genannte Fachgebiete (z.B. "Corporate Governance") als Alternative
+        options = fields + [s for s in skills if s not in DEGREE_LEVEL_SKILLS]
+        reqs.append(Requirement(options=options, text=line, nice=nice, kind="degree"))
+        return reqs
+    levels = [s for s in skills if s in DEGREE_LEVEL_SKILLS]
+    others = [s for s in skills if s not in DEGREE_LEVEL_SKILLS]
+    if levels:  # "Abgeschlossene Lehre oder Studium" -> eine Anforderung
+        reqs.append(Requirement(options=levels, text=line, nice=nice, kind="degree"))
+    if len(others) > 1 and OR_WORDS.search(line):
+        reqs.append(Requirement(options=others, text=line, nice=nice))
+    else:
+        reqs.extend(Requirement(options=[s], text=line, nice=nice) for s in others)
+    return reqs
+
+
+def extract_requirements(description: str) -> tuple[list[Requirement], list[str], bool]:
+    """Gibt (Anforderungen, nicht erkannte Pflicht-Zeilen, Abschnitt gefunden?) zurück."""
+    text = _normalize(description)
+    section = requirements_section(text)
+    section_found = section != text
+    reqs: list[Requirement] = []
+    unchecked: list[str] = []
+    seen: set[tuple[str, ...]] = set()
+    for raw in section.splitlines():
+        line = raw.strip(" \t-•*·")
+        if not line or _is_heading(line, REQUIREMENT_HEADINGS):
+            continue
+        found = _line_requirements(line)
+        if not found:
+            # Nur im erkannten Abschnitt melden – sonst wäre jede Zeile des Inserats "unklar"
+            if section_found and not _is_nice(line) and len(line) >= 20:
+                unchecked.append(line)
+            continue
+        for req in found:
+            key = tuple(sorted(req.options))
+            if key not in seen:
+                seen.add(key)
+                reqs.append(req)
+    # Was irgendwo Pflicht ist, ist nicht zusätzlich Nice-to-have
+    must_keys = {tuple(sorted(r.options)) for r in reqs if not r.nice}
+    reqs = [r for r in reqs if not (r.nice and tuple(sorted(r.options)) in must_keys)]
+    return reqs, unchecked, section_found
+
+
 def extract_rule_based(description: str) -> tuple[list[str], list[str]]:
-    section = requirements_section(description)
-    must, nice = [], []
-    for line in section.splitlines():
-        target = nice if _is_nice(line) else must
-        for skill in find_skills(line):
-            if skill not in must and skill not in target:
-                target.append(skill)
-    nice = [s for s in nice if s not in must]
-    return must, nice
+    reqs, _, _ = extract_requirements(description)
+    return [r.label for r in reqs if not r.nice], [r.label for r in reqs if r.nice]
 
 
 LLM_PROMPT = """Lies die folgende Stellenbeschreibung. Gib NUR ein JSON-Objekt zurück, ohne weiteren Text:
@@ -197,6 +331,19 @@ def extract_llm(description: str) -> tuple[list[str], list[str]] | None:
     except Exception as exc:
         log.warning("LLM-Extraktion fehlgeschlagen, nutze Regeln: %s", exc)
         return None
+
+
+def apply_skills(job: Job, use_llm: bool = False) -> None:
+    """Setzt requirements, must_have, nice_to_have, unchecked am Job."""
+    result = extract_llm(job.description) if use_llm else None
+    if result is not None:
+        must, nice = result
+        job.requirements = [Requirement([m]) for m in must] + [Requirement([n], nice=True) for n in nice]
+        job.unchecked, job.section_found = [], True
+    else:
+        job.requirements, job.unchecked, job.section_found = extract_requirements(job.description)
+    job.must_have = [r.label for r in job.requirements if not r.nice]
+    job.nice_to_have = [r.label for r in job.requirements if r.nice]
 
 
 def extract_skills(description: str, use_llm: bool = False) -> tuple[list[str], list[str]]:

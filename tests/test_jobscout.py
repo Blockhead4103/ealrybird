@@ -46,7 +46,7 @@ Flexible Arbeitszeiten und Python-Kurse
 
 def test_skill_extraction_separates_must_and_nice():
     must, nice = extract_rule_based(JOB_TEXT)
-    assert {"Python", "SQL", "Azure", "Docker", "Hochschulabschluss"} <= set(must)
+    assert {"Python", "SQL", "Azure", "Docker", "Studium Informatik"} <= set(must)
     assert "Kubernetes" in nice and "Kubernetes" not in must
 
 
@@ -272,3 +272,54 @@ def test_import_json(tmp_path):
     assert set(companies) == {"Novartis", "On"}  # unbekannte Grösse bleibt, bekannte 50 fällt raus
     assert companies["Novartis"].target == "https://novartis.wd3.myworkdayjobs.com/Novartis_Careers"
     assert import_json(src, yml)[0] == []  # zweiter Import: keine Duplikate
+
+
+SANDOZ = """Your Key Responsibilities:
+Coordinate governance-related KYC, AML, due diligence and procurement-related activities.
+What you’ll bring to the role:
+Essential and Desirable Requirements:
+University degree in Law, Business Administration, Corporate Governance, or a related discipline.
+Experience in corporate governance, corporate legal, company secretarial, or a comparable function.
+Good understanding of Swiss corporate law and governance requirements.
+Strong organizational, coordination, and execution skills, with a pragmatic approach.
+Fluent in German and English, both written and spoken.
+Why Sandoz?
+We have an agile and collegiate environment.
+"""
+
+
+def test_degree_field_is_a_knockout():
+    from jobscout.skills import apply_skills
+
+    job = Job("Sandoz", "Specialist Group Governance Legal", "u", description=SANDOZ)
+    apply_skills(job)
+    assert job.section_found  # typografischer Apostroph in "What you’ll bring"
+    assert "Scrum / Agile" not in job.must_have and "Einkauf / Procurement" not in job.must_have
+    assert job.must_have[0] == "Studium Recht oder Studium BWL / Business oder Corporate Governance"
+    assert "Gesellschaftsrecht" in job.must_have
+    assert any("organizational" in line for line in job.unchecked)
+
+    it = rank([job], "Master of Science in Informatik, ETH Zürich\nPython, SQL, Stakeholder Management, Deutsch, Englisch")[0]
+    assert it.knockout and it.score <= 40
+    bwl = rank([job], "Bachelor in Business Administration, HSG\nDeutsch, Englisch")[0]
+    assert not bwl.knockout  # BWL ist laut Inserat ausdrücklich zulässig
+    jurist = rank([job], "MLaw, Universität Zürich\nGesellschaftsrecht, Corporate Governance, Company Secretary\nDeutsch, Englisch")[0]
+    assert not jurist.knockout and jurist.score > 90
+
+
+def test_or_and_and_groups():
+    from jobscout.skills import extract_requirements
+
+    reqs, _, _ = extract_requirements("Ihr Profil\nPython oder Java\nDeutsch und Englisch\nAbgeschlossene Lehre oder Studium")
+    labels = [r.label for r in reqs]
+    assert "Python oder Java" in labels and "Deutsch" in labels and "Englisch" in labels
+    assert "Hochschulabschluss oder Lehre / EFZ" in labels
+
+
+def test_law_outside_degree_line_is_not_a_degree():
+    from jobscout.skills import cv_degree_fields, find_degree_fields
+
+    assert find_degree_fields("Good understanding of Swiss corporate law") == []
+    assert find_degree_fields("Master in Law (MLaw)") == ["Studium Recht"]
+    assert cv_degree_fields("Master of Science\nInformatik, ETH Zürich") == ["Studium Informatik"]
+    assert "Stakeholder Management" in find_skills("collaborate with stakeholders")

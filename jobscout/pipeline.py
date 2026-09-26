@@ -8,7 +8,7 @@ from .config import load_companies
 from .matcher import rank
 from .models import Job, Match
 from .scrapers import scrape_all
-from .skills import extract_skills
+from .skills import apply_skills
 from .storage import stamp_first_seen
 
 
@@ -30,7 +30,7 @@ def find_jobs(
     stamp_first_seen(jobs)
     jobs = filter_age(jobs, max_age_days)
     for job in jobs:
-        job.must_have, job.nice_to_have = extract_skills(job.description, use_llm=use_llm)
+        apply_skills(job, use_llm=use_llm)
     return jobs, errors
 
 

@@ -84,12 +84,20 @@ with tab_search:
             st.subheader(f"Rangliste nach Übereinstimmung mit deinem CV ({len(matches)})")
             for m in matches:
                 j = m.job
-                with st.expander(f"{m.score:.0f}% · {j.title} – {j.company}{where(j)}"):
+                flag = "⚠️ " if m.knockout else ""
+                with st.expander(f"{flag}{m.score:.0f}% · {j.title} – {j.company}{where(j)}"):
+                    for ko in m.knockout:
+                        st.error(f"Ausschlusskriterium – {ko}. Diese Studienrichtung wurde in deinem CV nicht gefunden.")
                     st.markdown(f"[Zum Inserat]({j.url}) · Datum: {j.effective_date or 'unbekannt'}"
                                 + ("" if j.posted else " *(erstes Auftauchen, kein Datum im Inserat)*"))
                     st.markdown(f"**Must-Have:** {', '.join(j.must_have) or '– (keine erkannt)'}")
                     st.markdown(f"**Nice-to-have:** {', '.join(j.nice_to_have) or '–'}")
                     st.markdown(f"✅ **Hast du:** {', '.join(m.matched) or '–'}  \n❌ **Fehlt:** {', '.join(m.missing) or '–'}")
+                    if m.unchecked:
+                        st.markdown("🔍 **Nicht automatisch prüfbar – bitte selbst beurteilen:**\n"
+                                    + "\n".join(f"- {line}" for line in m.unchecked))
+                    if not j.section_found:
+                        st.caption("Kein Anforderungs-Abschnitt erkannt – Skills aus dem ganzen Inserat, Ergebnis unsicherer.")
 
             if st.button("Top-Treffer per E-Mail senden"):
                 if not email_to:

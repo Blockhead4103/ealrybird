@@ -14,6 +14,21 @@ class Company:
 
 
 @dataclass
+class Requirement:
+    """Eine Anforderung aus dem Inserat. Sie ist erfüllt, wenn EINE der Optionen im CV vorkommt
+    (z.B. "Studium in Recht oder BWL" -> options=["Studium Recht", "Studium BWL / Business"])."""
+
+    options: list[str]
+    text: str = ""  # Originalzeile aus dem Inserat
+    nice: bool = False
+    kind: str = "skill"  # "skill" | "degree"
+
+    @property
+    def label(self) -> str:
+        return " oder ".join(self.options)
+
+
+@dataclass
 class Job:
     company: str
     title: str
@@ -24,6 +39,9 @@ class Job:
     first_seen: date | None = None  # wann JobScout die Stelle zum ersten Mal gesehen hat
     must_have: list[str] = field(default_factory=list)
     nice_to_have: list[str] = field(default_factory=list)
+    requirements: list[Requirement] = field(default_factory=list)
+    unchecked: list[str] = field(default_factory=list)  # Anforderungszeilen ohne erkannten Skill
+    section_found: bool = True  # False = kein Anforderungs-Abschnitt gefunden, ganzer Text durchsucht
 
     @property
     def effective_date(self) -> date | None:
@@ -41,3 +59,5 @@ class Match:
     score: float  # 0–100
     matched: list[str]
     missing: list[str]
+    knockout: list[str] = field(default_factory=list)  # nicht erfüllte Pflicht-Studienrichtungen
+    unchecked: list[str] = field(default_factory=list)  # selbst prüfen

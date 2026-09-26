@@ -26,6 +26,8 @@ def build_email(matches: list[Match], to_addr: str, titles: list[str], max_age_d
             f"   Datum: {when}",
             f"   Must-Have: {', '.join(j.must_have) or '–'}",
             f"   Fehlt dir: {', '.join(m.missing) or '–'}",
+            *[f"   ACHTUNG Ausschlusskriterium – {ko}" for ko in m.knockout],
+            *[f"   Selbst prüfen: {line}" for line in m.unchecked],
             f"   {j.url}",
             "",
         ]
@@ -34,7 +36,10 @@ def build_email(matches: list[Match], to_addr: str, titles: list[str], max_age_d
             f"<td><a href='{html.escape(j.url, quote=True)}'>{html.escape(j.title)}</a><br>"
             f"<small>{html.escape(j.company)} · {html.escape(j.location)} · {when}</small></td>"
             f"<td><small><b>Must-Have:</b> {html.escape(', '.join(j.must_have) or '–')}<br>"
-            f"<b>Fehlt dir:</b> {html.escape(', '.join(m.missing) or '–')}</small></td></tr>"
+            f"<b>Fehlt dir:</b> {html.escape(', '.join(m.missing) or '–')}"
+            + "".join(f"<br><b style='color:#b00020'>⚠️ Ausschlusskriterium – {html.escape(ko)}</b>" for ko in m.knockout)
+            + "".join(f"<br>🔍 Selbst prüfen: {html.escape(line)}" for line in m.unchecked)
+            + "</small></td></tr>"
         )
     msg.set_content("\n".join(plain))
     msg.add_alternative(
