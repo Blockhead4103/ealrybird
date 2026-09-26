@@ -42,9 +42,10 @@ def load_companies(path: Path | str = ROOT / "companies.yaml", min_employees: in
         source = str(entry.get("source", "")).lower()
         if source not in SUPPORTED_SOURCES:
             raise ValueError(f"{entry.get('name')}: unbekannte Quelle '{source}'. Erlaubt: {sorted(SUPPORTED_SOURCES)}")
-        employees = int(entry.get("employees", 0))
-        if employees < min_employees:
-            continue
+        raw_emp = entry.get("employees")
+        employees = int(raw_emp) if raw_emp not in (None, "") else None
+        if employees is not None and employees < min_employees:
+            continue  # unbekannte Grösse wird NICHT ausgefiltert, bekannte zu kleine schon
         companies.append(
             Company(
                 name=entry["name"],

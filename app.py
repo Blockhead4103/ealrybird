@@ -45,7 +45,10 @@ with tab_search:
     with col1:
         titles_raw = st.text_input("Jobtitel (mehrere mit Komma trennen)", placeholder="Data Engineer, Business Analyst")
         max_age = st.number_input("Nicht älter als (Tage)", min_value=1, max_value=365, value=14)
-        min_employees = st.number_input("Mindestens Mitarbeitende", min_value=0, value=100, step=50)
+        min_employees = st.number_input("Mindestens Mitarbeitende", min_value=0, value=100, step=50,
+                                        help="Firmen ohne Angabe in companies.yaml werden immer durchsucht.")
+        swiss_only = st.checkbox("Nur Stellen in der Schweiz", value=True,
+                                 help="Wichtig bei globalen Firmen (z.B. Novartis, Roche). Stellen ohne Ortsangabe bleiben drin.")
     with col2:
         cv_file = st.file_uploader("Dein CV (PDF)", type=["pdf"])
         email_to = st.text_input("E-Mail für die Resultate", placeholder="du@example.ch")
@@ -60,7 +63,8 @@ with tab_search:
             st.error("Keine Firmen in companies.yaml (mit genug Mitarbeitenden). Zuerst im Reiter 'Firma hinzufügen' Firmen erfassen.")
             st.stop()
         with st.status("Durchsuche Karriereseiten …", expanded=True) as status:
-            jobs, errors = find_jobs(titles, int(max_age), use_llm=use_llm, min_employees=int(min_employees), progress=st.write)
+            jobs, errors = find_jobs(titles, int(max_age), use_llm=use_llm, min_employees=int(min_employees),
+                                     progress=st.write, swiss_only=swiss_only)
             status.update(label=f"{len(jobs)} Stellen gefunden", state="complete", expanded=bool(errors))
         st.session_state["jobs"] = jobs
         st.session_state["search"] = (titles, int(max_age))
@@ -145,7 +149,9 @@ with tab_add:
 with tab_list:
     companies = load_companies(min_employees=0)
     if companies:
-        st.dataframe([{"Name": c.name, "Mitarbeitende": c.employees, "Quelle": c.source, "Kennung/URL": c.target} for c in companies],
+        st.dataframe([{"Name": c.name, "Mitarbeitende": c.employees if c.employees is not None else "unbekannt",
+                       "Startup": "ja" if c.extra.get("startup") else "", "Quelle": c.source, "Kennung/URL": c.target}
+                      for c in companies],
                      use_container_width=True)
     else:
         st.info("Noch keine Firmen erfasst.")

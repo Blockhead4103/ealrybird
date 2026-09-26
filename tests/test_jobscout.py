@@ -214,3 +214,61 @@ def test_send_uses_starttls_and_login(monkeypatch):
     monkeypatch.setattr(emailer.smtplib, "SMTP", FakeSMTP)
     emailer.send(build_email([], "you@test", [], 14))
     assert calls == [("connect", "smtp.test", 587), ("starttls",), ("login", "me@test"), ("send", "you@test")]
+
+
+def test_is_swiss():
+    from jobscout.scrapers.filters import is_swiss
+
+    assert is_swiss("Basel") and is_swiss("Zürich, ch") and is_swiss("Switzerland - Rotkreuz") and is_swiss("Genève")
+    assert is_swiss("East Hanover, NJ, USA") is False and is_swiss("Munich, de") is False
+    assert is_swiss("3 Locations") is None and is_swiss("") is None
+
+
+def test_swiss_filter_skips_detail_download(monkeypatch):
+    base = "https://api.smartrecruiters.com/v1/companies/Acme/postings"
+    monkeypatch.setattr(ats.http, "get", fake_get({
+        f"{base}/1": FakeResp({"jobAd": {"sections": {}}}),
+        base: FakeResp({"totalFound": 2, "content": [
+            {"id": "1", "name": "Engineer", "location": {"city": "Zug", "country": "ch"}},
+            {"id": "2", "name": "Engineer", "location": {"city": "Boston", "country": "us"}}]}),
+    }))  # /2 ist nicht gemockt: würde der Filter versagen, schlägt der Test fehl
+    jobs = ats.smartrecruiters(Company("Acme", 500, "smartrecruiters", "Acme"), title_filter([], swiss_only=True))
+    assert [j.location for j in jobs] == ["Zug, ch"]
+
+
+def test_workday_searches_per_title_and_dedupes(monkeypatch):
+    api = "https://acme.wd3.myworkdayjobs.com/wday/cxs/acme/Careers"
+    searches = []
+
+    def post(url, payload):
+        searches.append(payload["searchText"])
+        return FakeResp({"total": 2, "jobPostings": [
+            {"title": "Data Engineer", "externalPath": "/job/Basel/DE_1", "locationsText": "Basel"},
+            {"title": "Data Engineer", "externalPath": "/job/Boston/DE_2", "locationsText": "Boston, MA"}]})
+
+    monkeypatch.setattr(ats.http, "post_json", post)
+    monkeypatch.setattr(ats.http, "get", fake_get({f"{api}/job/Basel": FakeResp({"jobPostingInfo": {"location": "Basel", "jobDescription": "x"}})}))
+    jobs = ats.workday(Company("W", None, "workday", "https://acme.wd3.myworkdayjobs.com/Careers"),
+                       title_filter(["Data Engineer", "Engineer"], swiss_only=True))
+    assert searches == ["Data Engineer", "Engineer"]
+    assert len(jobs) == 1 and jobs[0].location == "Basel"
+
+
+def test_import_json(tmp_path):
+    from jobscout.importer import import_json
+
+    src = tmp_path / "c.json"
+    src.write_text(json.dumps([
+        {"name": "Novartis", "ats": "workday", "url": "https://novartis.wd3.myworkdayjobs.com", "site": "Novartis_Careers", "hq": "Basel"},
+        {"name": "On", "ats": "greenhouse", "token": "onrunning", "startup": False},
+        {"name": "Bot", "ats": "lever", "token": "bot", "startup": True, "employees": 50},
+        {"name": "Kaputt", "ats": "taleo", "token": "x"},
+    ]), encoding="utf-8")
+    yml = tmp_path / "c.yaml"
+    yml.write_text("companies: []\n", encoding="utf-8")
+    added, skipped = import_json(src, yml)
+    assert added == ["Novartis", "On", "Bot"] and len(skipped) == 1
+    companies = {c.name: c for c in config.load_companies(yml, min_employees=100)}
+    assert set(companies) == {"Novartis", "On"}  # unbekannte Grösse bleibt, bekannte 50 fällt raus
+    assert companies["Novartis"].target == "https://novartis.wd3.myworkdayjobs.com/Novartis_Careers"
+    assert import_json(src, yml)[0] == []  # zweiter Import: keine Duplikate

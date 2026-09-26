@@ -23,12 +23,14 @@ def main() -> None:
     parser.add_argument("--top", type=int, default=15)
     parser.add_argument("--min-score", type=float, default=0)
     parser.add_argument("--min-employees", type=int, default=100)
+    parser.add_argument("--weltweit", action="store_true", help="auch Stellen ausserhalb der Schweiz")
     parser.add_argument("--llm", action="store_true", help="KI zur Skill-Erkennung nutzen (siehe .env)")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     titles = [t.strip() for t in args.titles.split(",") if t.strip()]
-    jobs, errors = find_jobs(titles, args.days, use_llm=args.llm, min_employees=args.min_employees, progress=print)
+    jobs, errors = find_jobs(titles, args.days, use_llm=args.llm, min_employees=args.min_employees, progress=print,
+                              swiss_only=not args.weltweit)
     print(f"\n{len(jobs)} Stellen gefunden, {len(errors)} Quellen mit Fehlern.\n")
 
     if not args.cv:

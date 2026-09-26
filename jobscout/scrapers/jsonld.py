@@ -79,7 +79,7 @@ def extract_postings(html: str, page_url: str, company: str) -> list[Job]:
 def jsonld(company: Company, wanted: Wanted) -> list[Job]:
     start = company.target
     html = http.get(start, check_robots=True).text
-    jobs = [j for j in extract_postings(html, start, company.name) if wanted(j.title)]
+    jobs = [j for j in extract_postings(html, start, company.name) if wanted(j.title, j.location)]
 
     host = urlparse(start).netloc
     soup = BeautifulSoup(html, "html.parser")

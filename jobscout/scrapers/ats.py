@@ -20,7 +20,7 @@ from ..models import Company, Job
 from . import http
 from .util import html_to_text, parse_date
 
-Wanted = Callable[[str], bool]
+Wanted = Callable[..., bool]  # wanted(titel, ort="") -> bool, siehe filters.JobFilter
 MAX_DETAILS = 60  # Obergrenze Detail-Abrufe pro Firma
 
 
@@ -32,7 +32,9 @@ def smartrecruiters(company: Company, wanted: Wanted) -> list[Job]:
         data = http.get(base, params={"limit": 100, "offset": offset}).json()
         content = data.get("content", [])
         for item in content:
-            if not wanted(item.get("name", "")) or len(jobs) >= MAX_DETAILS:
+            loc = item.get("location") or {}
+            where = ", ".join(filter(None, [loc.get("city"), loc.get("country")]))
+            if not wanted(item.get("name", ""), where) or len(jobs) >= MAX_DETAILS:
                 continue
             detail = http.get(f"{base}/{item['id']}").json()
             sections = (detail.get("jobAd") or {}).get("sections") or {}
@@ -40,13 +42,12 @@ def smartrecruiters(company: Company, wanted: Wanted) -> list[Job]:
                 html_to_text((sections.get(key) or {}).get("text", ""))
                 for key in ("jobDescription", "qualifications", "additionalInformation")
             )
-            loc = item.get("location") or {}
             jobs.append(
                 Job(
                     company=company.name,
                     title=item.get("name", ""),
                     url=detail.get("postingUrl") or f"https://jobs.smartrecruiters.com/{company.target}/{item['id']}",
-                    location=", ".join(filter(None, [loc.get("city"), loc.get("country")])),
+                    location=where,
                     description=description,
                     posted=parse_date(item.get("releasedDate")),
                 )
@@ -62,7 +63,7 @@ def greenhouse(company: Company, wanted: Wanted) -> list[Job]:
     data = http.get(url, params={"content": "true"}).json()
     jobs = []
     for item in data.get("jobs", []):
-        if not wanted(item.get("title", "")):
+        if not wanted(item.get("title", ""), (item.get("location") or {}).get("name", "")):
             continue
         # "content" ist HTML, das zusätzlich HTML-escaped geliefert wird
         content = html_to_text(html_to_text(item.get("content", "")))
@@ -84,7 +85,7 @@ def lever(company: Company, wanted: Wanted) -> list[Job]:
     data = http.get(f"https://api.lever.co/v0/postings/{company.target}", params={"mode": "json"}).json()
     jobs = []
     for item in data:
-        if not wanted(item.get("text", "")):
+        if not wanted(item.get("text", ""), (item.get("categories") or {}).get("location", "")):
             continue
         parts = [item.get("descriptionPlain", "")]
         for block in item.get("lists", []):
@@ -111,7 +112,7 @@ def personio(company: Company, wanted: Wanted) -> list[Job]:
     jobs = []
     for pos in root.iter("position"):
         title = pos.findtext("name", "")
-        if not wanted(title):
+        if not wanted(title, pos.findtext("office", "")):
             continue
         parts = []
         for jd in pos.iter("jobDescription"):
@@ -136,7 +137,7 @@ def recruitee(company: Company, wanted: Wanted) -> list[Job]:
     data = http.get(f"https://{company.target}.recruitee.com/api/offers/").json()
     jobs = []
     for item in data.get("offers", []):
-        if not wanted(item.get("title", "")):
+        if not wanted(item.get("title", ""), item.get("location", "")):
             continue
         jobs.append(
             Job(
@@ -165,34 +166,41 @@ def _workday_posted(text: str, today: date | None = None) -> date | None:
 
 def workday(company: Company, wanted: Wanted) -> list[Job]:
     """target = URL der Workday-Jobseite, z.B. https://firma.wd3.myworkdayjobs.com/de-DE/Careers
-    Nutzt die (inoffizielle) JSON-Schnittstelle, die auch die Workday-Webseite selbst verwendet."""
+    Nutzt die (inoffizielle) JSON-Schnittstelle, die auch die Workday-Webseite selbst verwendet.
+    Bei globalen Firmen gibt es tausende Stellen – darum wird pro Jobtitel die Workday-Suche benutzt."""
     m = re.match(r"https://([^./]+)\.(wd\d+)\.myworkdayjobs\.com/(?:[a-z]{2}-[A-Z]{2}/)?([^/?#]+)", company.target)
     if not m:
         raise ValueError(f"{company.name}: Workday-URL nicht erkannt: {company.target}")
     tenant, wd, site = m.groups()
     api = f"https://{tenant}.{wd}.myworkdayjobs.com/wday/cxs/{tenant}/{site}"
-    jobs, offset, total = [], 0, None
-    while len(jobs) < MAX_DETAILS:
-        data = http.post_json(f"{api}/jobs", {"appliedFacets": {}, "limit": 20, "offset": offset, "searchText": ""}).json()
-        postings = data.get("jobPostings", [])
-        for item in postings:
-            if not wanted(item.get("title", "")) or len(jobs) >= MAX_DETAILS:
-                continue
-            path = item.get("externalPath", "")
-            info = http.get(f"{api}{path}", headers={"Accept": "application/json"}).json().get("jobPostingInfo", {})
-            jobs.append(
-                Job(
-                    company=company.name,
-                    title=item.get("title", ""),
-                    url=info.get("externalUrl") or f"https://{tenant}.{wd}.myworkdayjobs.com/{site}{path}",
-                    location=item.get("locationsText", ""),
-                    description=html_to_text(info.get("jobDescription", "")),
-                    posted=parse_date(info.get("startDate")) or _workday_posted(item.get("postedOn", "")),
+    searches = getattr(wanted, "titles", None) or [""]
+    jobs: list[Job] = []
+    seen: set[str] = set()
+    for search in searches:
+        offset, total = 0, None
+        while len(jobs) < MAX_DETAILS:
+            data = http.post_json(f"{api}/jobs", {"appliedFacets": {}, "limit": 20, "offset": offset, "searchText": search}).json()
+            postings = data.get("jobPostings", [])
+            for item in postings:
+                path = item.get("externalPath", "")
+                if path in seen or len(jobs) >= MAX_DETAILS or not wanted(item.get("title", ""), item.get("locationsText", "")):
+                    continue
+                seen.add(path)
+                info = http.get(f"{api}{path}", headers={"Accept": "application/json"}).json().get("jobPostingInfo", {})
+                places = [info.get("location", "")] + list(info.get("additionalLocations") or [])
+                jobs.append(
+                    Job(
+                        company=company.name,
+                        title=item.get("title", ""),
+                        url=info.get("externalUrl") or f"https://{tenant}.{wd}.myworkdayjobs.com/{site}{path}",
+                        location=" / ".join(p for p in places if p) or item.get("locationsText", ""),
+                        description=html_to_text(info.get("jobDescription", "")),
+                        posted=parse_date(info.get("startDate")) or _workday_posted(item.get("postedOn", "")),
+                    )
                 )
-            )
-        if total is None:  # Workday meldet "total" zuverlässig nur auf der ersten Seite
-            total = data.get("total", 0)
-        offset += len(postings)
-        if not postings or offset >= total:
-            break
+            if total is None:  # Workday meldet "total" zuverlässig nur auf der ersten Seite
+                total = data.get("total", 0)
+            offset += len(postings)
+            if not postings or offset >= total:
+                break
     return jobs

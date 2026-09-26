@@ -23,9 +23,10 @@ def find_jobs(
     use_llm: bool = False,
     min_employees: int = 100,
     progress: Callable[[str], None] | None = None,
+    swiss_only: bool = True,
 ) -> tuple[list[Job], list[str]]:
     companies = load_companies(min_employees=min_employees)
-    jobs, errors = scrape_all(companies, titles, progress)
+    jobs, errors = scrape_all(companies, titles, progress, swiss_only=swiss_only)
     stamp_first_seen(jobs)
     jobs = filter_age(jobs, max_age_days)
     for job in jobs:

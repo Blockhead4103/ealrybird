@@ -5,11 +5,15 @@
 #
 # Felder:
 #   name:      Anzeigename
-#   employees: Anzahl Mitarbeitende (Firmen unter dem Minimum, Standard 100, werden übersprungen).
+#   employees: Anzahl Mitarbeitende, OPTIONAL. Ist sie angegeben und unter dem Minimum (Standard 100),
+#              wird die Firma übersprungen. Fehlt sie, wird die Firma immer durchsucht.
 #              Quelle z.B. Geschäftsbericht, Firmenwebsite, Handelsregister/Zefix (Zefix nennt KEINE
 #              Mitarbeiterzahl), LinkedIn-Firmenseite (Angabe dort ist eine Spanne).
 #   source:    smartrecruiters | greenhouse | lever | personio | recruitee | workday | jsonld
 #   target:    Firmenkennung beim Anbieter bzw. URL (siehe Beispiele unten)
+#   hq, startup: optional, nur zur Info
+#
+# Ganze Listen aus einer JSON-Datei übernehmen:  python import_companies.py datei.json
 #
 # Beispiele fürs FORMAT (Firmennamen und Kennungen sind Platzhalter, nicht echt):
 #   - name: Beispiel AG
@@ -30,4 +34,70 @@
 #     source: jsonld
 #     target: https://www.irgendwas.ch/karriere
 
-companies: []
+companies:
+  - name: Novartis
+    source: workday
+    target: https://novartis.wd3.myworkdayjobs.com/Novartis_Careers
+    hq: Basel
+  - name: Roche
+    source: workday
+    target: https://roche.wd3.myworkdayjobs.com/roche-ext
+    hq: Basel
+  - name: Lonza
+    source: workday
+    target: https://lonza.wd3.myworkdayjobs.com/Lonza_Careers
+    hq: Basel
+  - name: Sandoz
+    source: workday
+    target: https://sandoz.wd103.myworkdayjobs.com/Sandoz_Careers
+    hq: Basel
+  - name: Galderma
+    source: workday
+    target: https://galderma.wd3.myworkdayjobs.com/External
+    hq: Zug
+  - name: IQVIA
+    source: workday
+    target: https://iqvia.wd1.myworkdayjobs.com/IQVIA
+  - name: Takeda
+    source: workday
+    target: https://takeda.wd3.myworkdayjobs.com/External
+  - name: Medtronic
+    source: workday
+    target: https://medtronic.wd1.myworkdayjobs.com/MedtronicCareers
+  - name: Sobi
+    source: smartrecruiters
+    target: Sobi
+  - name: Celerion
+    source: lever
+    target: celerion
+  - name: Swisscom
+    source: workday
+    target: https://swisscom.wd103.myworkdayjobs.com/SwisscomExternalCareers
+  - name: Sunrise
+    source: workday
+    target: https://sunrise.wd3.myworkdayjobs.com/Sunrise
+  - name: SMG Swiss Marketplace Group
+    source: smartrecruiters
+    target: SMGSwissMarketplaceGroup
+  - name: GetYourGuide
+    source: greenhouse
+    target: getyourguide
+  - name: 'On'
+    source: greenhouse
+    target: onrunning
+  - name: ANYbotics
+    source: lever
+    target: anybotics
+    startup: true
+  - name: Check Point (Lakera Zürich)
+    source: smartrecruiters
+    target: CheckPointSoftwareTechnologies2
+  - name: Kanadevia Inova
+    source: smartrecruiters
+    target: KanadeviaInova
+  - name: Swiss Life International
+    source: workday
+    target: https://swisslife.wd3.myworkdayjobs.com/Swiss_Life_International_Division_Career_Site
+  - name: Ateeca
+    source: smartrecruiters
+    target: Ateeca

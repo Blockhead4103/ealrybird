@@ -12,14 +12,15 @@ besten Treffer per **E-Mail**.
 
 | Thema | So funktioniert es | Grenze |
 |---|---|---|
-| Firmenliste | Du pflegst sie selbst in `companies.yaml` (in der App per Klick). | Es gibt keine kostenlose, offizielle Liste "alle CH-Firmen > 100 MA" mit Karriere-URLs. Die Mitarbeiterzahl trägst du selbst ein (z.B. aus dem Geschäftsbericht). |
+| Firmenliste | `companies.yaml` enthält eine Startliste mit 20 Firmen (Novartis, Roche, Swisscom, On …). Weitere per Klick in der App oder per JSON-Import. | Die Kennungen der Startliste sind nicht live geprüft. Die Mitarbeiterzahl ist optional: Fehlt sie, wird die Firma immer durchsucht. |
+| Nur Schweiz | Globale Firmen (z.B. Novartis, Takeda) haben tausende Stellen weltweit. Standardmässig werden nur Stellen mit Schweizer Ort behalten (Ländername oder eine von ~100 Schweizer Ortschaften). | Stellen ohne verwertbare Ortsangabe (z.B. "3 Locations") bleiben drin. Ein Ort wie "Baden" wird als Schweiz gewertet, auch wenn Baden-Baden gemeint wäre. |
 | Stellen lesen | Viele grosse Firmen nutzen ein Bewerbersystem mit öffentlicher Schnittstelle: **SmartRecruiters, Greenhouse, Lever, Personio, Recruitee, Workday**. Für alle anderen gibt es einen allgemeinen Modus (liest schema.org-Stellendaten). | Seiten, die ihre Stellen nur per JavaScript nachladen (z.B. viele SAP-SuccessFactors-Seiten), liefern im allgemeinen Modus oft **nichts**. Die Workday-Schnittstelle ist inoffiziell und kann sich ändern. |
 | Must-Have-Skills | Gratis-Regeln: Abschnitt "Ihr Profil / Anforderungen" finden, "von Vorteil" = Nice-to-have, bekannte Skills aus einem Wörterbuch (118 Einträge, v.a. DE/EN) erkennen. | Skills, die nicht im Wörterbuch stehen, werden nicht erkannt → eigene ergänzen (siehe unten) oder optional KI nutzen. |
 | "Nicht älter als" | Nutzt das Veröffentlichungsdatum der Stelle. | Fehlt es, zählt das Datum, an dem JobScout die Stelle **zum ersten Mal gesehen** hat. |
 | Match-Wert | 70 % Must-Haves im CV · 20 % Nice-to-haves · 10 % Wörter aus dem Jobtitel im CV. | Eine grobe Schätzung – das Inserat bitte trotzdem selbst lesen. |
 
 > **Stand der Prüfung:** Alle Teile sind mit simulierten Antworten der Anbieter und mit einer lokalen Test-Karriereseite
-> automatisch getestet (21 Tests). Gegen die echten Anbieter-Server konnte beim Erstellen **nicht** live getestet werden.
+> automatisch getestet (25 Tests). Gegen die echten Anbieter-Server konnte beim Erstellen **nicht** live getestet werden.
 > Falls eine Quelle einen Fehler meldet, siehst du ihn in der App pro Firma.
 
 ---
@@ -78,6 +79,13 @@ Beim nächsten Mal nur: Terminal → `cd Dokumente/jobscout` → aktivieren (Sch
 2. **Reiter "Suche":** Jobtitel (z.B. `Data Engineer, Business Analyst`), "Nicht älter als" in Tagen, CV hochladen → *Suchen*.
 3. Ergebnis: Stellen sortiert nach Match, mit Must-Have-Skills, was du hast und was dir fehlt.
 4. E-Mail-Adresse eingeben → *Top-Treffer per E-Mail senden*.
+
+### Viele Firmen auf einmal importieren
+JSON-Datei im Format `[{"name": "...", "ats": "workday", "url": "https://x.wd3.myworkdayjobs.com", "site": "Careers"}, {"name": "...", "ats": "greenhouse", "token": "..."}]`, dann:
+```
+python import_companies.py meine_firmen.json
+```
+Bereits vorhandene Firmennamen werden übersprungen.
 
 ### Eigene Skills ergänzen
 Datei `data/extra_skills.txt` anlegen (Ordner `data` ggf. erstellen), eine Zeile pro Skill:
@@ -163,7 +171,8 @@ SQLite (Datum des ersten Funds), `smtplib` (E-Mail), optional LLM über OpenAI-k
 
 ```
 app.py                  Streamlit-Oberfläche
-cli.py                  Kommandozeile / täglicher Versand
+cli.py                  Kommandozeile / täglicher Versand (--weltweit = auch Stellen ausserhalb CH)
+import_companies.py     Firmenliste aus JSON importieren
 companies.yaml          Firmenliste
 jobscout/
   config.py             .env, Firmenliste laden/ergänzen
@@ -173,7 +182,9 @@ jobscout/
     ats.py              SmartRecruiters, Greenhouse, Lever, Personio, Recruitee, Workday
     jsonld.py           allgemeiner Modus (schema.org/JobPosting)
     __init__.py         Titel-Filter, paralleles Scrapen
+  scrapers/filters.py   Titel- und Schweiz-Filter
   detect.py             erkennt das Bewerbersystem hinter einer URL
+  importer.py           JSON-Firmenliste -> companies.yaml
   skills.py             Must-Have/Nice-to-have-Erkennung (Regeln + optional LLM)
   cv.py                 PDF → Text
   matcher.py            Scoring

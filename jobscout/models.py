@@ -7,7 +7,7 @@ from datetime import date
 @dataclass
 class Company:
     name: str
-    employees: int
+    employees: int | None  # None = unbekannt (Firma wurde bewusst manuell aufgenommen)
     source: str  # "smartrecruiters" | "greenhouse" | "lever" | "personio" | "recruitee" | "workday" | "jsonld"
     target: str  # Firmen-Kennung beim Anbieter oder URL der Karriereseite
     extra: dict = field(default_factory=dict)
